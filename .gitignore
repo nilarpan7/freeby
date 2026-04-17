@@ -1,0 +1,72 @@
+# Root .gitignore for Kramic.sh
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Dependencies (handled by subdirectories)
+node_modules/
+venv/
+__pycache__/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation builds
+docs/_build/
+site/
+
+# Coverage reports
+coverage/
+.coverage
+htmlcov/
+
+# Test outputs
+.pytest_cache/
+.tox/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Package manager locks (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# Pipfile.lock
