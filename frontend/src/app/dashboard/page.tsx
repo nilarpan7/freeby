@@ -1,0 +1,315 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3 } from 'lucide-react';
+import { HandDrawnFilters, Highlight, KarmaBadge, DifficultyBadge, ProgressRing, StatusPill } from '@/components/HandDrawn';
+import { useAuth } from '@/lib/auth-context';
+import { MOCK_TASKS, getKarmaEvents } from '@/lib/mock-data';
+import type { Task, Difficulty } from '@/lib/types';
+
+export default function StudentDashboard() {
+    const router = useRouter();
+    const { user, logout } = useAuth();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | 'all'>('all');
+    const [domainFilter, setDomainFilter] = useState<string>('all');
+
+    useEffect(() => {
+        if (!user) {
+            router.push('/auth?role=student');
+        }
+    }, [user, router]);
+
+    if (!user) return null;
+
+    const karmaEvents = getKarmaEvents(user.id);
+    const REFERRAL_THRESHOLD = 500;
+
+    // Filter tasks
+    const openTasks = MOCK_TASKS.filter(t => t.status === 'open');
+    const filteredTasks = openTasks.filter(t => {
+        const matchesSearch = !searchQuery || 
+            t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            t.stack.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesDifficulty = difficultyFilter === 'all' || t.difficulty === difficultyFilter;
+        const matchesDomain = domainFilter === 'all' || 
+            t.stack.some(s => s.toLowerCase().includes(domainFilter.toLowerCase()));
+        return matchesSearch && matchesDifficulty && matchesDomain;
+    });
+
+    // My claimed/submitted tasks
+    const myTasks = MOCK_TASKS.filter(t => t.claimed_by === user.id);
+
+    const handleLogout = () => {
+        logout();
+        router.push('/');
+    };
+
+    return (
+        <main className="relative min-h-screen w-full bg-[#fdfbf7] text-[#2d2d2d] selection:bg-[#ffeb3b]">
+            <HandDrawnFilters />
+
+            <div
+                className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
+                style={{
+                    backgroundImage: `linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)`,
+                    backgroundSize: '40px 40px',
+                }}
+            />
+
+            {/* ── NAVBAR ── */}
+            <nav className="sticky top-0 z-50 flex w-full items-center justify-between px-6 md:px-8 py-4 backdrop-blur-md bg-[#fdfbf7]/80 border-b border-black/5">
+                <div className="text-2xl font-black tracking-tight cursor-pointer" onClick={() => router.push('/')}>
+                    Kramic<span className="text-amber-500">.sh</span>
+                </div>
+                <div className="hidden md:flex items-center gap-6">
+                    <button onClick={() => router.push('/leaderboard')} className="flex items-center gap-1.5 font-bold text-sm hover:text-amber-600 transition-colors">
+                        <Trophy size={16} /> Leaderboard
+                    </button>
+                    <button onClick={() => router.push(`/profile/${user.id}`)} className="flex items-center gap-1.5 font-bold text-sm hover:text-amber-600 transition-colors">
+                        <Star size={16} /> Profile
+                    </button>
+                </div>
+                <div className="flex items-center gap-4">
+                    <KarmaBadge score={user.karma_score} size="sm" />
+                    <div
+                        className="h-10 w-10 rounded-full border-2 border-black bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-white text-sm cursor-pointer"
+                        style={{ filter: "url(#rough-paper)" }}
+                        onClick={() => router.push(`/profile/${user.id}`)}
+                    >
+                        {user.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <button onClick={handleLogout} className="text-gray-400 hover:text-black transition-colors">
+                        <LogOut size={18} />
+                    </button>
+                </div>
+            </nav>
+
+            <div className="relative z-10 mx-auto max-w-7xl px-6 md:px-8 py-8">
+                {/* ── WELCOME + KARMA OVERVIEW ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+                    {/* Welcome Card */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="lg:col-span-2 relative p-8"
+                    >
+                        <div
+                            className="absolute inset-0 bg-white border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,1)] sketch-border-1"
+                            style={{ filter: "url(#rough-paper)" }}
+                        />
+                        <div className="relative z-10">
+                            <h1 className="text-3xl md:text-4xl font-black mb-2">
+                                Hey, <Highlight>{user.name.split(' ')[0]}</Highlight> 👋
+                            </h1>
+                            <p className="text-gray-600 font-medium text-lg mb-6">
+                                {user.karma_score >= REFERRAL_THRESHOLD
+                                    ? "🎉 You've unlocked Referral Requests! Browse your task history to request referrals."
+                                    : `${REFERRAL_THRESHOLD - user.karma_score} more Karma to unlock referrals. Keep building!`
+                                }
+                            </p>
+
+                            <div className="flex flex-wrap gap-6">
+                                <div className="text-center">
+                                    <div className="text-3xl font-black">{user.tasks_completed}</div>
+                                    <div className="text-xs font-bold text-gray-500 uppercase">Tasks Done</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-3xl font-black">{user.endorsements_received}</div>
+                                    <div className="text-xs font-bold text-gray-500 uppercase">Endorsements</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-3xl font-black text-amber-500">{user.domain}</div>
+                                    <div className="text-xs font-bold text-gray-500 uppercase">Domain</div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Karma Ring */}
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="relative p-6 flex flex-col items-center justify-center"
+                    >
+                        <div
+                            className="absolute inset-0 bg-white border-4 border-black shadow-[8px_8px_0px_#ffeb3b] sketch-border-2"
+                            style={{ filter: "url(#rough-paper)" }}
+                        />
+                        <div className="relative z-10 flex flex-col items-center">
+                            <ProgressRing value={user.karma_score} max={REFERRAL_THRESHOLD} size={140} label="/ 500" />
+                            <p className="text-sm font-bold text-gray-500 mt-3">Referral Threshold</p>
+                            {user.karma_score >= REFERRAL_THRESHOLD && (
+                                <span className="mt-2 bg-green-100 text-green-800 px-3 py-1 text-xs font-black border border-green-600 rounded-full">
+                                    ✅ UNLOCKED
+                                </span>
+                            )}
+                        </div>
+                    </motion.div>
+                </div>
+
+                {/* ── MY ACTIVE TASKS ── */}
+                {myTasks.length > 0 && (
+                    <div className="mb-12">
+                        <h2 className="text-2xl font-black mb-6">My Active Tasks</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {myTasks.map((task, i) => (
+                                <motion.div
+                                    key={task.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    onClick={() => router.push(`/task/${task.id}`)}
+                                    className="relative p-5 cursor-pointer group"
+                                >
+                                    <div
+                                        className="absolute inset-0 bg-amber-50 border-3 border-black transition-all shadow-[4px_4px_0px_rgba(0,0,0,1)] group-hover:shadow-[8px_8px_0px_#ffeb3b] sketch-border-3"
+                                        style={{ filter: "url(#rough-paper)" }}
+                                    />
+                                    <div className="relative z-10">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="font-bold text-lg">{task.title}</h3>
+                                            <StatusPill status={task.status} />
+                                        </div>
+                                        <p className="text-sm text-gray-500 font-medium">{task.senior_name} • {task.senior_company}</p>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TASK FEED ── */}
+                <div>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                        <h2 className="text-2xl font-black">
+                            Open <Highlight color="#bbf7d0">Tasks</Highlight>
+                        </h2>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Search */}
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search tasks..."
+                                    className="pl-9 pr-4 py-2 border-2 border-black bg-white font-medium text-sm outline-none focus:shadow-[3px_3px_0px_rgba(0,0,0,1)] transition-shadow w-48"
+                                    style={{ filter: "url(#rough-paper)" }}
+                                />
+                            </div>
+
+                            {/* Difficulty Filter */}
+                            <div className="flex gap-1">
+                                {(['all', 'easy', 'medium', 'hard'] as const).map(d => (
+                                    <button
+                                        key={d}
+                                        onClick={() => setDifficultyFilter(d)}
+                                        className={`px-3 py-1.5 text-xs font-bold uppercase border-2 border-black transition-all ${difficultyFilter === d ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                                        style={{ filter: "url(#rough-paper)" }}
+                                    >
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Task Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                        {filteredTasks.length === 0 ? (
+                            <div className="col-span-full py-16 text-center">
+                                <p className="text-xl font-bold text-gray-400 italic">No tasks match your filters.</p>
+                            </div>
+                        ) : (
+                            filteredTasks.map((task, i) => (
+                                <motion.div
+                                    key={task.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    onClick={() => router.push(`/task/${task.id}`)}
+                                    className="relative p-6 cursor-pointer group"
+                                >
+                                    <div
+                                        className="absolute inset-0 bg-white border-4 border-black transition-all duration-300 shadow-[6px_6px_0px_rgba(0,0,0,1)] group-hover:shadow-[10px_10px_0px_#a5f3fc]"
+                                        style={{ filter: "url(#rough-paper)", borderRadius: i % 2 === 0 ? "255px 15px 225px 15px/15px 225px 15px 255px" : "15px 225px 15px 255px/255px 15px 225px 15px" }}
+                                    />
+                                    <div className="relative z-10 flex flex-col h-full">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <DifficultyBadge difficulty={task.difficulty} />
+                                            {task.match_score && (
+                                                <span className="bg-[#ffeb3b] px-2 py-0.5 font-bold text-xs border-2 border-black rotate-2" style={{ filter: "url(#rough-paper)" }}>
+                                                    {task.match_score}% match
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <h3 className="text-xl font-black mb-2">{task.title}</h3>
+                                        <p className="text-gray-600 font-medium text-sm mb-4 line-clamp-2 flex-grow">{task.description}</p>
+
+                                        <div className="flex flex-wrap gap-1.5 mb-4">
+                                            {task.stack.map(s => (
+                                                <span key={s} className="text-xs font-bold bg-black text-white px-2 py-0.5" style={{ filter: "url(#rough-paper)" }}>
+                                                    {s}
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex items-center justify-between border-t-2 border-dashed border-black/15 pt-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1 text-sm font-bold text-gray-500">
+                                                    <Clock size={14} /> {task.time_estimate_min}m
+                                                </div>
+                                                <span className="text-xs text-gray-400 font-medium">
+                                                    {task.senior_name}
+                                                </span>
+                                            </div>
+                                            <span className="font-bold text-sm flex items-center gap-1 group-hover:text-amber-600 transition-colors">
+                                                Claim <ArrowRight size={14} />
+                                            </span>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* ── RECENT KARMA ── */}
+                {karmaEvents.length > 0 && (
+                    <div className="mt-16 mb-8">
+                        <h2 className="text-2xl font-black mb-6">Recent <Highlight color="#ddd6fe">Karma</Highlight> Activity</h2>
+                        <div className="space-y-3">
+                            {karmaEvents.slice(0, 5).map((event, i) => (
+                                <motion.div
+                                    key={event.id}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    className="flex items-center justify-between p-4 border-2 border-black bg-white"
+                                    style={{ filter: "url(#rough-paper)" }}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-lg font-black ${event.karma_delta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {event.karma_delta > 0 ? '+' : ''}{event.karma_delta}
+                                        </span>
+                                        <div>
+                                            <p className="font-bold text-sm">{event.description}</p>
+                                            {event.task_title && <p className="text-xs text-gray-500">{event.task_title}</p>}
+                                        </div>
+                                    </div>
+                                    <span className="text-xs text-gray-400 font-medium">{new Date(event.created_at).toLocaleDateString()}</span>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </main>
+    );
+}

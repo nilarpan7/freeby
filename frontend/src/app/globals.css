@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --bg-cream: #fdfbf7;
+  --bg-warm: #fffdf5;
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b7280;
+  --accent-yellow: #ffeb3b;
+  --accent-cyan: #a5f3fc;
+  --accent-green: #bbf7d0;
+  --accent-orange: #fed7aa;
+  --accent-red: #fca5a5;
+  --accent-purple: #ddd6fe;
+  --karma-gold: #f59e0b;
+  --karma-gradient-start: #f59e0b;
+  --karma-gradient-end: #ef4444;
+}
+
+body {
+  color: var(--text-primary);
+  background: var(--bg-cream);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Selection highlight */
+::selection {
+  background: var(--accent-yellow);
+  color: var(--text-primary);
+}
+
+/* Karma pulse animation */
+@keyframes karma-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+.animate-karma-pulse {
+  animation: karma-pulse 2s ease-in-out infinite;
+}
+
+/* Gradient text */
+.text-karma-gradient {
+  background: linear-gradient(135deg, var(--karma-gradient-start), var(--karma-gradient-end));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shine sweep animation */
+@keyframes shine-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shine-sweep 3s ease-in-out infinite;
+}
+
+/* Float animation */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: gentle-float 4s ease-in-out infinite;
+}
+
+/* Progress ring */
+@keyframes progress-fill {
+  from { stroke-dashoffset: 283; }
+}
+
+/* Sketch border radius helpers */
+.sketch-border-1 {
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+
+.sketch-border-2 {
+  border-radius: 15px 225px 15px 255px / 255px 15px 225px 15px;
+}
+
+.sketch-border-3 {
+  border-radius: 225px 15px 255px 15px / 15px 255px 15px 225px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Tag input */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 2px solid #000;
+  background: #f0f0f0;
+}
