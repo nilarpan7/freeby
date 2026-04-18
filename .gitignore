@@ -70,3 +70,5 @@ htmlcov/
 # package-lock.json
 # yarn.lock
 # Pipfile.lock
+
+.agents/

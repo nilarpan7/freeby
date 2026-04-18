@@ -54,12 +54,16 @@ export const authApi = {
         id: authData.user.id,
         full_name: data.name,
         role: dbRole,
-        domain: data.domain || null,
         skills: data.skills || [],
         karma_score: 0,
         profile_completed: false, // Will complete in setup page
       };
       
+      // Only set domain if it's a valid enum value (null would fail on domain_type enum)
+      if (data.domain) {
+        profileData.domain = data.domain;
+      }
+
       if (data.company) {
         profileData.company = data.company;
       }
@@ -98,18 +102,40 @@ export const authApi = {
     const user = await this.getMe();
     if (!user?.id) throw new ApiError(401, 'Unauthorized');
     
-    const { error } = await supabase.from('profiles').update({
+    const updatePayload = {
       domain: data.domain,
       skills: data.skills,
-      bio: data.bio,
-      github_url: data.github_url,
-      avatar_url: data.avatar_url,
-      company: data.company,
+      bio: data.bio || null,
+      github_url: data.github_url || null,
+      avatar_url: data.avatar_url || null,
+      company: data.company || null,
       profile_completed: true
-    }).eq('id', user.id);
-    if (error) throw new ApiError(400, error.message);
+    };
+
+    // Try update first
+    const { data: updated, error } = await supabase
+      .from('profiles')
+      .update(updatePayload)
+      .eq('id', user.id)
+      .select()
+      .single();
     
-    return { user: await this.getMe() };
+    if (error) {
+      console.error('Profile update error:', error);
+      // If update fails (RLS), try upsert
+      const { error: upsertError } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, full_name: user.name, role: user.role === 'client' ? 'SENIOR' : 'STUDENT', ...updatePayload })
+        .select()
+        .single();
+      if (upsertError) {
+        console.error('Profile upsert error:', upsertError);
+        throw new ApiError(400, upsertError.message);
+      }
+    }
+    
+    const refreshedUser = await this.getMe();
+    return { user: refreshedUser };
   },
   
   async getMe() {

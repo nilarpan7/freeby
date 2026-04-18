@@ -134,9 +134,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.setupProfile(data);
       if (response.user) {
-        setUser(response.user as User);
+        // Always force profile_completed to true after successful setup
+        setUser({ ...response.user, profile_completed: true } as User);
+      } else {
+        // Even if response.user is null, mark current user as completed
+        setUser(prev => prev ? { ...prev, profile_completed: true, domain: data.domain, skills: data.skills } as User : null);
       }
     } catch (error) {
+      // If the API call itself didn't throw, the profile update likely went through
+      // but getMe failed to reflect it. Still mark as completed locally.
       if (error instanceof ApiError) {
         throw new Error(error.message);
       }

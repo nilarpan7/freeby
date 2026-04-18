@@ -21,6 +21,8 @@ export interface User {
   profile_completed: boolean;
   tasks_completed: number;
   tasks_posted: number;
+  mentor_score?: number;
+  endorsements_received?: number;
   created_at: string;
 }
 

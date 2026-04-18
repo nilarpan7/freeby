@@ -11,7 +11,7 @@ import type { Task, Difficulty } from '@/lib/types';
 
 export default function StudentDashboard() {
     const router = useRouter();
-    const { user, logout } = useAuth();
+    const { user, logout, isLoading } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | 'all'>('all');
     const [domainFilter, setDomainFilter] = useState<string>('all');
@@ -20,12 +20,13 @@ export default function StudentDashboard() {
     const [tasksLoading, setTasksLoading] = useState(true);
 
     useEffect(() => {
+        if (isLoading) return; // Wait for auth to resolve
         if (!user) {
             router.push('/auth?role=student');
-        } else if (!user.profile_completed) {
-            router.push('/auth/setup');
         }
-    }, [user, router]);
+        // Don't redirect to setup — let the user stay on dashboard
+        // Setup page is only for initial onboarding
+    }, [user, isLoading, router]);
 
     useEffect(() => {
         if (user) {
@@ -49,6 +50,9 @@ export default function StudentDashboard() {
         }
     };
 
+    if (isLoading) return (
+        <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center font-black text-2xl">Loading...</div>
+    );
     if (!user) return null;
 
     const REFERRAL_THRESHOLD = 500;
@@ -174,12 +178,57 @@ export default function StudentDashboard() {
                     </motion.div>
                 </div>
 
+                {/* ── STARTER QUESTS BANNER (low karma) ── */}
+                {user.karma_score < 30 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mb-8"
+                    >
+                        <div
+                            className="relative p-8 bg-gradient-to-r from-green-100 via-emerald-50 to-cyan-100 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,1)]"
+                            style={{ filter: "url(#rough-paper)" }}
+                        >
+                            <div className="flex flex-col md:flex-row items-center gap-6">
+                                <motion.div
+                                    animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
+                                    transition={{ duration: 3, repeat: Infinity }}
+                                    className="text-6xl"
+                                >
+                                    🚀
+                                </motion.div>
+                                <div className="flex-1 text-center md:text-left">
+                                    <h2 className="text-2xl font-black mb-2">
+                                        New? Start with <Highlight color="#bbf7d0">Starter Quests</Highlight>
+                                    </h2>
+                                    <p className="text-gray-700 font-medium mb-1">
+                                        You need karma to unlock paid tasks. Complete beginner-friendly coding quests,
+                                        submit your GitHub repo, and earn karma through AI code analysis!
+                                    </p>
+                                    <p className="text-sm text-gray-500">
+                                        5 quests available — earn up to 95 karma points
+                                    </p>
+                                </div>
+                                <motion.button
+                                    whileHover={{ scale: 1.05, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => router.push('/starter')}
+                                    className="bg-green-600 text-white border-4 border-black px-8 py-4 font-black text-lg shadow-[6px_6px_0px_#000] hover:shadow-[10px_10px_0px_#000] transition-all whitespace-nowrap"
+                                >
+                                    Start Quests →
+                                </motion.button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* ── BROWSE TASKS SECTION ── */}
                 <div className="mb-12">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
+                        transition={{ delay: 0.4 }}
                         className="relative p-8 text-center"
                     >
                         <div
@@ -193,16 +242,26 @@ export default function StudentDashboard() {
                             <p className="text-gray-600 font-medium text-lg mb-6">
                                 Browse available tasks and start building your reputation!
                             </p>
-                            <motion.button
-                                whileHover={{ scale: 1.05, y: -2 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => router.push('/tasks')}
-                                className="bg-black text-white border-4 border-black px-8 py-4 font-black text-lg shadow-[8px_8px_0px_#ffeb3b] hover:shadow-[12px_12px_0px_#ffeb3b] transition-all flex items-center gap-3 mx-auto"
-                            >
-                                <Code2 size={24} />
-                                Browse All Tasks
-                                <ArrowRight size={24} />
-                            </motion.button>
+                            <div className="flex gap-4 justify-center flex-wrap">
+                                <motion.button
+                                    whileHover={{ scale: 1.05, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => router.push('/tasks')}
+                                    className="bg-black text-white border-4 border-black px-8 py-4 font-black text-lg shadow-[8px_8px_0px_#ffeb3b] hover:shadow-[12px_12px_0px_#ffeb3b] transition-all flex items-center gap-3"
+                                >
+                                    <Code2 size={24} />
+                                    Browse Paid Tasks
+                                    <ArrowRight size={24} />
+                                </motion.button>
+                                <motion.button
+                                    whileHover={{ scale: 1.05, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => router.push('/starter')}
+                                    className="bg-white text-black border-4 border-black px-8 py-4 font-black text-lg shadow-[8px_8px_0px_#bbf7d0] hover:shadow-[12px_12px_0px_#bbf7d0] transition-all flex items-center gap-3"
+                                >
+                                    🚀 Starter Quests
+                                </motion.button>
+                            </div>
                         </div>
                     </motion.div>
                 </div>
@@ -309,7 +368,7 @@ export default function StudentDashboard() {
                                         <p className="text-gray-600 font-medium text-sm mb-4 line-clamp-2 flex-grow">{task.description}</p>
 
                                         <div className="flex flex-wrap gap-1.5 mb-4">
-                                            {task.stack.map(s => (
+                                            {(task.stack || []).map((s: string) => (
                                                 <span key={s} className="text-xs font-bold bg-black text-white px-2 py-0.5" style={{ filter: "url(#rough-paper)" }}>
                                                     {s}
                                                 </span>
