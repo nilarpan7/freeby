@@ -77,16 +77,29 @@ class Task(Base):
     stack = Column(JSON, default=[])
     difficulty = Column(Enum(Difficulty), nullable=False)
     time_estimate_min = Column(Integer, nullable=False)
+    
+    # Karma and Rewards
+    min_karma = Column(Integer, default=0)  # Minimum karma required to apply
+    reward_amount = Column(Float, default=0.0)  # Payment amount in USD/INR
+    reward_karma = Column(Integer, default=10)  # Karma points awarded on completion
+    
+    # Design files
+    figma_url = Column(String, nullable=True)  # Figma design link
+    design_files = Column(JSON, default=[])  # Other design file URLs
+    
+    # Task metadata
     client_id = Column(String, ForeignKey("users.id"), nullable=False)
     status = Column(Enum(TaskStatus), default=TaskStatus.OPEN)
     claimed_by = Column(String, ForeignKey("users.id"), nullable=True)
     match_score = Column(Integer, nullable=True)
+    deadline = Column(DateTime, nullable=True)  # Optional deadline
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     client = relationship("User", back_populates="tasks_created", foreign_keys=[client_id])
     student = relationship("User", back_populates="tasks_claimed", foreign_keys=[claimed_by])
     submission = relationship("TaskSubmission", back_populates="task", uselist=False)
+    applications = relationship("TaskApplication", back_populates="task")
 
 class TaskSubmission(Base):
     __tablename__ = "task_submissions"
@@ -144,3 +157,17 @@ class SprintSession(Base):
     base_karma = Column(Integer, default=20)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+class TaskApplication(Base):
+    __tablename__ = "task_applications"
+    
+    id = Column(String, primary_key=True)
+    task_id = Column(String, ForeignKey("tasks.id"), nullable=False)
+    student_id = Column(String, ForeignKey("users.id"), nullable=False)
+    application_text = Column(String, nullable=False)  # Why they're a good fit
+    status = Column(String, default="pending")  # pending, accepted, rejected
+    applied_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    task = relationship("Task", back_populates="applications")
+    student = relationship("User")

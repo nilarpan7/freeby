@@ -153,6 +153,39 @@ export default function StudentDashboard() {
                     </motion.div>
                 </div>
 
+                {/* ── BROWSE TASKS SECTION ── */}
+                <div className="mb-12">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="relative p-8 text-center"
+                    >
+                        <div
+                            className="absolute inset-0 bg-gradient-to-r from-amber-100 to-cyan-100 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,1)]"
+                            style={{ filter: "url(#rough-paper)" }}
+                        />
+                        <div className="relative z-10">
+                            <h2 className="text-3xl font-black mb-4">
+                                Ready to earn <Highlight color="#ffeb3b">Karma</Highlight>?
+                            </h2>
+                            <p className="text-gray-600 font-medium text-lg mb-6">
+                                Browse available tasks and start building your reputation!
+                            </p>
+                            <motion.button
+                                whileHover={{ scale: 1.05, y: -2 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => router.push('/tasks')}
+                                className="bg-black text-white border-4 border-black px-8 py-4 font-black text-lg shadow-[8px_8px_0px_#ffeb3b] hover:shadow-[12px_12px_0px_#ffeb3b] transition-all flex items-center gap-3 mx-auto"
+                            >
+                                <Code2 size={24} />
+                                Browse All Tasks
+                                <ArrowRight size={24} />
+                            </motion.button>
+                        </div>
+                    </motion.div>
+                </div>
+
                 {/* ── MY ACTIVE TASKS ── */}
                 {myTasks.length > 0 && (
                     <div className="mb-12">

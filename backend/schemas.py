@@ -9,3 +9,6 @@ class BountySpec(BaseModel):
     price_inr: int = Field(description="Suggested fair price in INR")
     category: str = Field(description="The general category, e.g., 'data_analysis', 'web_scraping', 'automation'")
     difficulty: str = Field(description="Difficulty tier: 'easy', 'medium', or 'hard'")
+    min_karma: int = Field(default=0, description="Minimum karma score required to apply for this task")
+    figma_url: Optional[str] = Field(default=None, description="Figma design URL if provided")
+

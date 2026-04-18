@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { User, Mail, Code2, Star, ArrowRight, Lock } from 'lucide-react';
 import { HandDrawnFilters, Highlight } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
+import { authApi } from '@/lib/api';
 import { MOCK_STUDENTS, MOCK_CLIENTS } from '@/lib/mock-data';
 import type { UserRole, Domain } from '@/lib/types';
 import { initializeGoogleAuth } from '@/lib/google-auth';
@@ -26,22 +27,34 @@ function AuthForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const [googleReady, setGoogleReady] = React.useState(false);
+
     React.useEffect(() => {
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'your-google-client-id.apps.googleusercontent.com';
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         
+        // Skip Google auth if no real client ID is configured
+        if (!clientId || clientId === 'your-google-client-id.apps.googleusercontent.com') {
+            console.warn('Google OAuth: No valid client ID configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID in .env.local');
+            return;
+        }
+
         const cleanup = initializeGoogleAuth(clientId, async (response) => {
             setLoading(true);
             setError('');
             try {
                 await googleLogin(response.credential, { role });
-                router.push('/dashboard'); 
+                // The googleLogin function already sets the user state
+                // Just redirect based on the response
+                router.push('/auth/setup'); // New users always go to setup first
             } catch (err: any) {
+                console.error('Google login error:', err);
                 setError(err.message || 'Google login failed');
             } finally {
                 setLoading(false);
             }
         });
 
+        setGoogleReady(true);
         return cleanup;
     }, [role, googleLogin, router]);
 
@@ -69,7 +82,14 @@ function AuthForm() {
                 skills,
                 company: role === 'client' ? 'Demo Corp' : undefined,
             });
-            router.push(role === 'student' ? '/dashboard' : '/dashboard/client');
+            
+            // Check if user needs profile setup
+            const userData = await authApi.getMe();
+            if (!userData.profile_completed) {
+                router.push('/auth/setup');
+            } else {
+                router.push(userData.role === 'student' ? '/dashboard' : '/dashboard/client');
+            }
         } catch (err: any) {
             setError(err.message || 'Registration failed');
         } finally {
@@ -88,6 +108,10 @@ function AuthForm() {
     };
 
     const handleGoogleLogin = () => {
+        if (!googleReady) {
+            setError('Google Sign-In not configured. Use the form above or Quick Demo Login instead.');
+            return;
+        }
         if (window.google) {
             window.google.accounts.id.prompt();
         } else {

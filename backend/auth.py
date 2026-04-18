@@ -4,12 +4,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-from database.database import get_db
-from database.models import User
+from database.mongodb_models import User
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, GOOGLE_CLIENT_ID
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -47,11 +45,8 @@ def verify_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get the current authenticated user"""
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    """Get the current authenticated user from MongoDB"""
     payload = verify_token(token)
     user_id: str = payload.get("sub")
     
@@ -61,7 +56,7 @@ async def get_current_user(
             detail="Could not validate credentials",
         )
     
-    user = db.query(User).filter(User.id == user_id).first()
+    user = await User.find_one(User.id == user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

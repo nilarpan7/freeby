@@ -1,12 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime
 import uuid
 
-from database.database import get_db
-from database.models import User, SprintSession, KarmaEvent
+from database.mongodb_models import User, SprintSession, KarmaEvent
 from auth import get_current_user, get_current_student
 from liveblocks import liveblocks_service
 
@@ -27,7 +25,6 @@ class CompleteSprintRequest(BaseModel):
 @router.post("")
 async def create_sprint(
     request: CreateSprintRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_student)
 ):
     """Create a new squad sprint session"""
@@ -58,9 +55,7 @@ async def create_sprint(
         status="active"
     )
     
-    db.add(sprint)
-    db.commit()
-    db.refresh(sprint)
+    await sprint.insert()
     
     return {
         "id": sprint.id,
@@ -74,12 +69,11 @@ async def create_sprint(
 @router.post("/join")
 async def join_sprint(
     request: JoinSprintRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_student)
 ):
     """Join an existing sprint session"""
     
-    sprint = db.query(SprintSession).filter(SprintSession.id == request.sprint_id).first()
+    sprint = await SprintSession.find_one(SprintSession.id == request.sprint_id)
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
     
@@ -94,7 +88,7 @@ async def join_sprint(
     
     # Add participant
     sprint.participants.append(current_user.id)
-    db.commit()
+    await sprint.save()
     
     return {
         "message": "Joined sprint successfully",
@@ -104,12 +98,11 @@ async def join_sprint(
 @router.get("/{sprint_id}/auth")
 async def get_sprint_auth(
     sprint_id: str,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get Liveblocks authentication token for a sprint"""
     
-    sprint = db.query(SprintSession).filter(SprintSession.id == sprint_id).first()
+    sprint = await SprintSession.find_one(SprintSession.id == sprint_id)
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
     
@@ -135,12 +128,11 @@ async def get_sprint_auth(
 @router.post("/complete")
 async def complete_sprint(
     request: CompleteSprintRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_student)
 ):
     """Complete a sprint and award karma"""
     
-    sprint = db.query(SprintSession).filter(SprintSession.id == request.sprint_id).first()
+    sprint = await SprintSession.find_one(SprintSession.id == request.sprint_id)
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
     
@@ -153,12 +145,14 @@ async def complete_sprint(
     # Mark sprint as completed
     sprint.status = "completed"
     sprint.completed_at = datetime.utcnow()
+    await sprint.save()
     
     # Award base karma to all participants
     for participant_id in sprint.participants:
-        participant = db.query(User).filter(User.id == participant_id).first()
+        participant = await User.find_one(User.id == participant_id)
         if participant:
             participant.karma_score += sprint.base_karma
+            await participant.save()
             
             karma_event = KarmaEvent(
                 id=f"ke-{uuid.uuid4()}",
@@ -167,16 +161,16 @@ async def complete_sprint(
                 karma_delta=sprint.base_karma,
                 description=f"Completed squad sprint: {sprint.title}"
             )
-            db.add(karma_event)
+            await karma_event.insert()
     
     # Award peer upvote karma
     for upvoted_id in request.peer_upvotes:
         if upvoted_id in sprint.participants and upvoted_id != current_user.id:
-            upvoted_user = db.query(User).filter(User.id == upvoted_id).first()
+            upvoted_user = await User.find_one(User.id == upvoted_id)
             if upvoted_user:
                 upvote_karma = 4
                 upvoted_user.karma_score += upvote_karma
-                upvoted_user.endorsements_received += 1
+                await upvoted_user.save()
                 
                 karma_event = KarmaEvent(
                     id=f"ke-{uuid.uuid4()}",
@@ -185,9 +179,7 @@ async def complete_sprint(
                     karma_delta=upvote_karma,
                     description=f"Peer upvote from {current_user.name} in sprint: {sprint.title}"
                 )
-                db.add(karma_event)
-    
-    db.commit()
+                await karma_event.insert()
     
     # Clean up Liveblocks room
     try:
@@ -198,19 +190,16 @@ async def complete_sprint(
     return {"message": "Sprint completed successfully"}
 
 @router.get("")
-async def get_active_sprints(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+async def get_active_sprints(current_user: User = Depends(get_current_user)):
     """Get all active sprint sessions"""
     
-    sprints = db.query(SprintSession).filter(SprintSession.status == "active").all()
+    sprints = await SprintSession.find(SprintSession.status == "active").to_list()
     
     result = []
     for sprint in sprints:
         participants = []
         for participant_id in sprint.participants:
-            user = db.query(User).filter(User.id == participant_id).first()
+            user = await User.find_one(User.id == participant_id)
             if user:
                 participants.append({
                     "id": user.id,

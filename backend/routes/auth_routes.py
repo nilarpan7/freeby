@@ -1,12 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import uuid
 
-from database.database import get_db
-from database.models import User, UserRole, Domain
+from database.mongodb_models import User, UserRole, Domain
 from auth import (
     create_access_token,
     get_password_hash,
@@ -43,24 +41,25 @@ class TokenResponse(BaseModel):
     needs_profile_setup: bool
 
 @router.post("/google", response_model=TokenResponse)
-async def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+async def google_auth(request: GoogleAuthRequest):
     """Authenticate with Google OAuth - Step 1"""
     
     # Verify Google token
     google_user = await verify_google_token(request.token)
     
     # Check if user exists by Google ID
-    user = db.query(User).filter(User.google_id == google_user["google_id"]).first()
+    user = await User.find_one(User.google_id == google_user["google_id"])
     
     if not user:
         # Check by email
-        user = db.query(User).filter(User.email == google_user["email"]).first()
+        user = await User.find_one(User.email == google_user["email"])
         
         if user:
             # Link Google account to existing user
             user.google_id = google_user["google_id"]
             if not user.avatar_url:
                 user.avatar_url = google_user["avatar_url"]
+            await user.save()
         else:
             # Create new user (profile incomplete)
             user = User(
@@ -73,10 +72,7 @@ async def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db))
                 profile_completed=False,
                 karma_score=0
             )
-            db.add(user)
-        
-        db.commit()
-        db.refresh(user)
+            await user.insert()
     
     access_token = create_access_token(data={"sub": user.id})
     
@@ -104,11 +100,11 @@ async def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db))
     }
 
 @router.post("/register", response_model=TokenResponse)
-async def register(request: RegisterRequest, db: Session = Depends(get_db)):
+async def register(request: RegisterRequest):
     """Register a new user with email/password"""
     
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == request.email).first()
+    existing_user = await User.find_one(User.email == request.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,9 +122,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         karma_score=0
     )
     
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    await user.insert()
     
     # Create access token
     access_token = create_access_token(data={"sub": user.id})
@@ -157,13 +151,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=TokenResponse)
-async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Login with email/password"""
     
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = await User.find_one(User.email == form_data.username)
     if not user or not user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -204,8 +195,7 @@ async def login(
 @router.post("/profile-setup")
 async def setup_profile(
     request: ProfileSetupRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """Complete user profile setup after registration/Google auth"""
     
@@ -230,8 +220,7 @@ async def setup_profile(
     
     current_user.profile_completed = True
     
-    db.commit()
-    db.refresh(current_user)
+    await current_user.save()
     
     return {
         "message": "Profile setup completed successfully",

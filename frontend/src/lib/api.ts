@@ -2,7 +2,7 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'ApiError';
@@ -21,17 +21,30 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    ...options,
-    headers,
-  });
+  console.log(`API Call: ${options.method || 'GET'} ${API_BASE_URL}${url}`);
   
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new ApiError(response.status, error.detail || 'Request failed');
+  try {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      ...options,
+      headers,
+    });
+    
+    console.log(`API Response: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      console.error('API Error:', error);
+      throw new ApiError(response.status, error.detail || 'Request failed');
+    }
+    
+    return response.json();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    console.error('Network Error:', error);
+    throw new ApiError(0, 'Network error - please check if the backend is running');
   }
-  
-  return response.json();
 }
 
 // Auth API
@@ -72,6 +85,7 @@ export const authApi = {
     token: string;
     role: string;
   }) {
+    console.log('Google Auth API call:', { role: data.role, tokenLength: data.token.length });
     return fetchWithAuth('/api/auth/google', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -99,13 +113,22 @@ export const authApi = {
 
 // Task API
 export const taskApi = {
-  async getTasks(filters?: { status?: string; difficulty?: string; domain?: string }) {
-    const params = new URLSearchParams(filters as any);
-    return fetchWithAuth(`/api/tasks?${params}`);
+  async getTasks(filters?: {
+    status?: string;
+    difficulty?: string;
+    domain?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.difficulty) params.append('difficulty', filters.difficulty);
+    if (filters?.domain) params.append('domain', filters.domain);
+    
+    const query = params.toString();
+    return fetchWithAuth(`/api/tasks${query ? `?${query}` : ''}`);
   },
   
-  async getTask(taskId: string) {
-    return fetchWithAuth(`/api/tasks/${taskId}`);
+  async getTask(id: string) {
+    return fetchWithAuth(`/api/tasks/${id}`);
   },
   
   async createTask(data: {
@@ -114,6 +137,11 @@ export const taskApi = {
     stack: string[];
     difficulty: string;
     time_estimate_min: number;
+    min_karma?: number;
+    reward_amount?: number;
+    reward_karma?: number;
+    figma_url?: string;
+    design_files?: string[];
   }) {
     return fetchWithAuth('/api/tasks', {
       method: 'POST',
@@ -121,23 +149,41 @@ export const taskApi = {
     });
   },
   
-  async claimTask(taskId: string) {
-    return fetchWithAuth(`/api/tasks/${taskId}/claim`, {
+  async claimTask(id: string) {
+    return fetchWithAuth(`/api/tasks/${id}/claim`, {
       method: 'POST',
     });
   },
   
-  async submitTask(taskId: string, data: { github_link: string; submission_text: string }) {
-    return fetchWithAuth(`/api/tasks/${taskId}/submit`, {
+  async applyForTask(id: string, applicationText: string) {
+    return fetchWithAuth(`/api/tasks/${id}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ application_text: applicationText }),
+    });
+  },
+  
+  async submitTask(id: string, data: { github_link: string; submission_text: string }) {
+    return fetchWithAuth(`/api/tasks/${id}/submit`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
   
-  async reviewTask(taskId: string, data: { action: string; feedback?: string }) {
-    return fetchWithAuth(`/api/tasks/${taskId}/review`, {
+  async reviewTask(id: string, data: { action: string; feedback?: string }) {
+    return fetchWithAuth(`/api/tasks/${id}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+  
+  async getApplications(taskId: string) {
+    return fetchWithAuth(`/api/tasks/${taskId}/applications`);
+  },
+  
+  async selectApplicant(taskId: string, applicationId: string) {
+    return fetchWithAuth(`/api/tasks/${taskId}/select-applicant`, {
+      method: 'POST',
+      body: JSON.stringify({ application_id: applicationId }),
     });
   },
 };
@@ -188,5 +234,3 @@ export const sprintApi = {
     return fetchWithAuth('/api/sprints');
   },
 };
-
-export { ApiError };

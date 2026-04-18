@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { User, Code2, Github, Briefcase, Camera, Sparkles } from 'lucide-react';
+import { User, Code2, Briefcase, Camera, Sparkles, ArrowRight } from 'lucide-react';
 import { 
     HandDrawnFilters, 
     Highlight, 
@@ -157,7 +157,7 @@ export default function ProfileSetupPage() {
                         <div className="space-y-2">
                             <label className="block font-black text-sm uppercase tracking-wider text-gray-500">GitHub Profile URL</label>
                             <SketchInput
-                                icon={Github}
+                                icon={Code2}
                                 type="url"
                                 placeholder="https://github.com/yourusername"
                                 value={githubUrl}

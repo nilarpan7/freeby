@@ -6,8 +6,7 @@ import json
 import hashlib
 import uuid
 
-from database.mock_db import get_all_bounties
-from database.database import init_db
+from database.mongodb import connect_to_mongodb, close_mongodb_connection
 from config import FRONTEND_URL
 
 # Import routes
@@ -60,11 +59,10 @@ def mock_generate_pow_receipt(container_id, code_snippet, output=""):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    init_db()
-    print("✅ Database initialized")
+    await connect_to_mongodb()
     yield
     # Shutdown
-    # Add any cleanup code here if needed
+    await close_mongodb_connection()
 
 app = FastAPI(
     title="Kramic.sh API", 
@@ -75,7 +73,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:3000", "*"],
+    allow_origins=[FRONTEND_URL, "http://localhost:3000", "http://localhost:3001", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,12 +90,9 @@ async def root():
     return {
         "message": "Kramic.sh API",
         "version": "1.0.0",
+        "database": "MongoDB",
         "docs": "/docs"
     }
-
-@app.get("/api/bounties")
-def fetch_bounties():
-    return {"bounties": get_all_bounties()}
 
 @app.websocket("/ws/arena/{bounty_id}")
 async def arena_websocket(websocket: WebSocket, bounty_id: str):
