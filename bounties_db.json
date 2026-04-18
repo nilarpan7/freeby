@@ -1,0 +1,20 @@
+[
+    {
+        "id": "mock-bounty-1",
+        "msme_id": "msme-1",
+        "spec": {
+            "title": "Excel Data Extractor",
+            "stack": [
+                "python",
+                "pandas"
+            ],
+            "deliverable": "Script to read excel and find top 3 items based on column B.",
+            "time_estimate_min": 60,
+            "price_inr": 250,
+            "category": "scripting",
+            "difficulty": "easy"
+        },
+        "status": "open",
+        "match_score": 98
+    }
+]

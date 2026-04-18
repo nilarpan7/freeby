@@ -6,13 +6,14 @@ import { motion } from 'framer-motion';
 import { User, Mail, Code2, Star, ArrowRight, Lock } from 'lucide-react';
 import { HandDrawnFilters, Highlight } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
-import { MOCK_STUDENTS, MOCK_SENIORS } from '@/lib/mock-data';
+import { MOCK_STUDENTS, MOCK_CLIENTS } from '@/lib/mock-data';
 import type { UserRole, Domain } from '@/lib/types';
+import { initializeGoogleAuth } from '@/lib/google-auth';
 
 function AuthForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { register, login: authLogin, googleLogin } = useAuth();
+    const { register, login: authLogin, googleLogin, mockLogin } = useAuth();
 
     const initialRole = (searchParams.get('role') as UserRole) || 'student';
     const [role, setRole] = useState<UserRole>(initialRole);
@@ -21,9 +22,28 @@ function AuthForm() {
     const [password, setPassword] = useState('');
     const [domain, setDomain] = useState<Domain>('Backend');
     const [skills, setSkills] = useState<string[]>([]);
-    const [quickLogin, setQuickLogin] = useState(false);
+    const [quickLogin, setQuickLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    React.useEffect(() => {
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'your-google-client-id.apps.googleusercontent.com';
+        
+        const cleanup = initializeGoogleAuth(clientId, async (response) => {
+            setLoading(true);
+            setError('');
+            try {
+                await googleLogin(response.credential, { role });
+                router.push('/dashboard'); 
+            } catch (err: any) {
+                setError(err.message || 'Google login failed');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        return cleanup;
+    }, [role, googleLogin, router]);
 
     const domains: { label: string; value: Domain }[] = [
         { label: 'Frontend', value: 'Frontend' },
@@ -47,9 +67,9 @@ function AuthForm() {
                 role,
                 domain,
                 skills,
-                company: role === 'senior' ? 'Demo Corp' : undefined,
+                company: role === 'client' ? 'Demo Corp' : undefined,
             });
-            router.push(role === 'student' ? '/dashboard' : '/dashboard/senior');
+            router.push(role === 'student' ? '/dashboard' : '/dashboard/client');
         } catch (err: any) {
             setError(err.message || 'Registration failed');
         } finally {
@@ -58,18 +78,21 @@ function AuthForm() {
     };
 
     const handleQuickLogin = (userId: string) => {
-        const allUsers = [...MOCK_STUDENTS, ...MOCK_SENIORS];
+        const allUsers = [...MOCK_STUDENTS, ...MOCK_CLIENTS];
         const user = allUsers.find(u => u.id === userId);
         if (user) {
-            // Mock login for demo accounts
-            localStorage.setItem('kramic_user', JSON.stringify(user));
-            router.push(user.role === 'student' ? '/dashboard' : '/dashboard/senior');
+            // Use AuthContext's mockLogin explicitly so it updates state
+            mockLogin(user);
+            router.push(user.role === 'student' ? '/dashboard' : '/dashboard/client');
         }
     };
 
-    const handleGoogleLogin = async () => {
-        // TODO: Implement Google OAuth
-        alert('Google OAuth coming soon!');
+    const handleGoogleLogin = () => {
+        if (window.google) {
+            window.google.accounts.id.prompt();
+        } else {
+            setError('Google Sign-In not ready. Please try again.');
+        }
     };
 
     return (
@@ -148,11 +171,11 @@ function AuthForm() {
                         <motion.button
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => setRole('senior')}
-                            className={`flex-1 flex items-center justify-center gap-2 p-4 border-4 border-black font-black text-lg transition-all sketch-border-2 ${role === 'senior' ? 'bg-black text-white shadow-[6px_6px_0px_#a5f3fc]' : 'bg-white hover:shadow-[4px_4px_0px_rgba(0,0,0,0.2)]'}`}
+                            onClick={() => setRole('client')}
+                            className={`flex-1 flex items-center justify-center gap-2 p-4 border-4 border-black font-black text-lg transition-all sketch-border-2 ${role === 'client' ? 'bg-black text-white shadow-[6px_6px_0px_#a5f3fc]' : 'bg-white hover:shadow-[4px_4px_0px_rgba(0,0,0,0.2)]'}`}
                             style={{ filter: "url(#rough-paper)" }}
                         >
-                            <Star size={20} /> Senior
+                            <Star size={20} /> Client
                         </motion.button>
                     </div>
 
@@ -171,7 +194,7 @@ function AuthForm() {
                                 animate={{ opacity: 1, height: 'auto' }}
                                 className="mt-4 space-y-2"
                             >
-                                {(role === 'student' ? MOCK_STUDENTS : MOCK_SENIORS).map(user => (
+                                {(role === 'student' ? MOCK_STUDENTS : MOCK_CLIENTS).map(user => (
                                     <motion.button
                                         key={user.id}
                                         whileHover={{ x: 4 }}
@@ -182,7 +205,7 @@ function AuthForm() {
                                         <div>
                                             <span className="font-bold">{user.name}</span>
                                             <span className="text-gray-500 ml-2 text-sm">{user.domain}</span>
-                                            {user.role === 'senior' && <span className="text-amber-600 ml-2 text-sm font-bold">@ {user.company}</span>}
+                                            {user.role === 'client' && <span className="text-amber-600 ml-2 text-sm font-bold">@ {user.company}</span>}
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {user.role === 'student' && (
@@ -221,7 +244,7 @@ function AuthForm() {
                             <Mail className="absolute left-4 top-3.5 text-gray-400 group-focus-within:text-black transition-colors z-10" size={18} />
                             <input
                                 type="email"
-                                placeholder={role === 'senior' ? 'Work Email' : 'Email Address'}
+                                placeholder={role === 'client' ? 'Work Email' : 'Email Address'}
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 className="w-full bg-white border-2 border-black rounded-xl py-3 pl-12 pr-4 text-black font-medium focus:outline-none focus:shadow-[4px_4px_0px_rgba(0,0,0,1)] transition-all placeholder:text-gray-400 relative"
@@ -273,7 +296,7 @@ function AuthForm() {
                             className="w-full flex items-center justify-center gap-3 bg-black text-white border-4 border-black px-8 py-4 font-black text-lg shadow-[8px_8px_0px_#ffeb3b] hover:shadow-[12px_12px_0px_#ffeb3b] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-[4px_4px_0px_#ffeb3b] disabled:translate-y-0 relative overflow-hidden"
                         >
                             <span className={`relative z-10 flex items-center justify-center gap-2 ${loading && 'opacity-0'}`}>
-                                {role === 'student' ? 'Start Building Karma' : 'Start Mentoring'} <ArrowRight size={20} />
+                                {role === 'student' ? 'Start Building Karma' : 'Start Posting Tasks'} <ArrowRight size={20} />
                             </span>
                             {loading && (
                                 <div className="absolute inset-0 flex items-center justify-center">

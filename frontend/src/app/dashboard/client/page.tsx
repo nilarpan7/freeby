@@ -6,10 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, CheckCircle2, XCircle, RotateCcw, Clock, Code2, Zap, Star, LogOut, Users, ArrowRight, MessageSquare, ChevronDown } from 'lucide-react';
 import { HandDrawnFilters, Highlight, SketchButton, SketchInput, SketchTextarea, TagInput, SketchSelect, DifficultyBadge, StatusPill, KarmaBadge } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
-import { getTasksBySenior, getPendingReviews, MOCK_TASKS } from '@/lib/mock-data';
+import { getTasksByClient, getPendingReviews, MOCK_TASKS } from '@/lib/mock-data';
 import type { Task, Difficulty } from '@/lib/types';
 
-export default function SeniorDashboard() {
+export default function ClientDashboard() {
     const router = useRouter();
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'review' | 'my-tasks' | 'post'>('review');
@@ -27,14 +27,16 @@ export default function SeniorDashboard() {
     const [expandedReview, setExpandedReview] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!user || user.role !== 'senior') {
-            router.push('/auth?role=senior');
+        if (!user || user.role !== 'client') {
+            router.push('/auth?role=client');
+        } else if (!user.profile_completed) {
+            router.push('/auth/setup');
         }
     }, [user, router]);
 
     if (!user) return null;
 
-    const myTasks = getTasksBySenior(user.id);
+    const myTasks = getTasksByClient(user.id);
     const pendingReviews = getPendingReviews(user.id);
 
     const handlePostTask = () => {
@@ -81,7 +83,7 @@ export default function SeniorDashboard() {
             <nav className="sticky top-0 z-50 flex w-full items-center justify-between px-6 md:px-8 py-4 backdrop-blur-md bg-[#fdfbf7]/80 border-b border-black/5">
                 <div className="text-2xl font-black tracking-tight cursor-pointer" onClick={() => router.push('/')}>
                     Kramic<span className="text-amber-500">.sh</span>
-                    <span className="ml-2 text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 border border-amber-300 rounded-full">SENIOR</span>
+                    <span className="ml-2 text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 border border-amber-300 rounded-full uppercase">CLIENT</span>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2 bg-white border-2 border-black px-3 py-1.5" style={{ filter: "url(#rough-paper)" }}>

@@ -41,9 +41,6 @@ export const authApi = {
     password: string;
     name: string;
     role: string;
-    domain: string;
-    skills: string[];
-    company?: string;
   }) {
     return fetchWithAuth('/api/auth/register', {
       method: 'POST',
@@ -74,11 +71,22 @@ export const authApi = {
   async googleAuth(data: {
     token: string;
     role: string;
-    domain: string;
-    skills: string[];
-    company?: string;
   }) {
     return fetchWithAuth('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async setupProfile(data: {
+    domain: string;
+    skills: string[];
+    bio?: string;
+    github_url?: string;
+    avatar_url?: string;
+    company?: string;
+  }) {
+    return fetchWithAuth('/api/auth/profile-setup', {
       method: 'POST',
       body: JSON.stringify(data),
     });

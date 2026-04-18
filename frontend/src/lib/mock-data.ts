@@ -4,56 +4,53 @@
 import { User, Task, KarmaEvent, TaskSubmission, ReferralRequest, LeaderboardEntry } from './types';
 
 // ─── USERS ─────────────────────────────────────────────────────────────
-export const MOCK_SENIORS: User[] = [
+export const MOCK_CLIENTS: User[] = [
   {
-    id: 'senior-1',
+    id: 'client-1',
     name: 'Priya Sharma',
     email: 'priya@google.com',
-    role: 'senior',
+    role: 'client',
     domain: 'Backend',
     skills: ['Go', 'Kubernetes', 'gRPC', 'PostgreSQL'],
     karma_score: 0,
     avatar_url: '',
     github_url: 'https://github.com/priyasharma',
     company: 'Google',
-    mentor_score: 47,
+    profile_completed: true,
     tasks_completed: 0,
     tasks_posted: 12,
-    endorsements_received: 0,
     created_at: '2025-09-15T10:00:00Z',
   },
   {
-    id: 'senior-2',
+    id: 'client-2',
     name: 'Arjun Mehta',
     email: 'arjun@razorpay.com',
-    role: 'senior',
+    role: 'client',
     domain: 'Frontend',
     skills: ['React', 'TypeScript', 'Next.js', 'Tailwind'],
     karma_score: 0,
     avatar_url: '',
     github_url: 'https://github.com/arjunmehta',
     company: 'Razorpay',
-    mentor_score: 32,
+    profile_completed: true,
     tasks_completed: 0,
     tasks_posted: 8,
-    endorsements_received: 0,
     created_at: '2025-10-02T10:00:00Z',
   },
   {
-    id: 'senior-3',
+    id: 'client-3',
     name: 'Sneha Gupta',
     email: 'sneha@microsoft.com',
-    role: 'senior',
+    role: 'client',
     domain: 'Data',
     skills: ['Python', 'Pandas', 'SQL', 'Spark'],
     karma_score: 0,
     avatar_url: '',
     github_url: 'https://github.com/snehagupta',
     company: 'Microsoft',
-    mentor_score: 56,
+    profile_completed: true,
     tasks_completed: 0,
     tasks_posted: 15,
-    endorsements_received: 0,
     created_at: '2025-08-20T10:00:00Z',
   },
 ];
@@ -69,9 +66,9 @@ export const MOCK_STUDENTS: User[] = [
     karma_score: 480,
     avatar_url: '',
     github_url: 'https://github.com/rahulkumar',
+    profile_completed: true,
     tasks_completed: 42,
     tasks_posted: 0,
-    endorsements_received: 15,
     created_at: '2025-11-01T10:00:00Z',
   },
   {
@@ -84,9 +81,9 @@ export const MOCK_STUDENTS: User[] = [
     karma_score: 350,
     avatar_url: '',
     github_url: 'https://github.com/ananyasingh',
+    profile_completed: true,
     tasks_completed: 31,
     tasks_posted: 0,
-    endorsements_received: 12,
     created_at: '2025-11-15T10:00:00Z',
   },
   {
@@ -99,9 +96,9 @@ export const MOCK_STUDENTS: User[] = [
     karma_score: 520,
     avatar_url: '',
     github_url: 'https://github.com/vikrampatel',
+    profile_completed: true,
     tasks_completed: 48,
     tasks_posted: 0,
-    endorsements_received: 20,
     created_at: '2025-10-20T10:00:00Z',
   },
   {
@@ -114,9 +111,9 @@ export const MOCK_STUDENTS: User[] = [
     karma_score: 290,
     avatar_url: '',
     github_url: 'https://github.com/deepikareddy',
+    profile_completed: true,
     tasks_completed: 25,
     tasks_posted: 0,
-    endorsements_received: 8,
     created_at: '2025-12-01T10:00:00Z',
   },
   {
@@ -129,9 +126,9 @@ export const MOCK_STUDENTS: User[] = [
     karma_score: 160,
     avatar_url: '',
     github_url: 'https://github.com/amitjoshi',
+    profile_completed: true,
     tasks_completed: 14,
     tasks_posted: 0,
-    endorsements_received: 5,
     created_at: '2026-01-10T10:00:00Z',
   },
 ];
@@ -145,9 +142,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['Python', 'Regex'],
     difficulty: 'easy',
     time_estimate_min: 90,
-    senior_id: 'senior-1',
-    senior_name: 'Priya Sharma',
-    senior_company: 'Google',
+    client_id: 'client-1',
+    client_name: 'Priya Sharma',
+    client_company: 'Google',
     status: 'open',
     match_score: 95,
     created_at: '2026-04-15T10:00:00Z',
@@ -159,9 +156,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['React', 'TypeScript', 'Tailwind'],
     difficulty: 'medium',
     time_estimate_min: 180,
-    senior_id: 'senior-2',
-    senior_name: 'Arjun Mehta',
-    senior_company: 'Razorpay',
+    client_id: 'client-2',
+    client_name: 'Arjun Mehta',
+    client_company: 'Razorpay',
     status: 'open',
     match_score: 88,
     created_at: '2026-04-15T12:00:00Z',
@@ -173,9 +170,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['Python', 'Pandas', 'SQL'],
     difficulty: 'easy',
     time_estimate_min: 120,
-    senior_id: 'senior-3',
-    senior_name: 'Sneha Gupta',
-    senior_company: 'Microsoft',
+    client_id: 'client-3',
+    client_name: 'Sneha Gupta',
+    client_company: 'Microsoft',
     status: 'open',
     match_score: 92,
     created_at: '2026-04-14T09:00:00Z',
@@ -187,9 +184,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['Python', 'FastAPI', 'JWT', 'SQLite'],
     difficulty: 'medium',
     time_estimate_min: 240,
-    senior_id: 'senior-1',
-    senior_name: 'Priya Sharma',
-    senior_company: 'Google',
+    client_id: 'client-1',
+    client_name: 'Priya Sharma',
+    client_company: 'Google',
     status: 'claimed',
     claimed_by: 'student-1',
     match_score: 97,
@@ -202,9 +199,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['Docker', 'Node.js', 'CI/CD', 'GitHub Actions'],
     difficulty: 'hard',
     time_estimate_min: 180,
-    senior_id: 'senior-1',
-    senior_name: 'Priya Sharma',
-    senior_company: 'Google',
+    client_id: 'client-1',
+    client_name: 'Priya Sharma',
+    client_company: 'Google',
     status: 'open',
     match_score: 78,
     created_at: '2026-04-16T08:00:00Z',
@@ -216,9 +213,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['React', 'TypeScript', 'Recharts', 'Tailwind'],
     difficulty: 'medium',
     time_estimate_min: 150,
-    senior_id: 'senior-2',
-    senior_name: 'Arjun Mehta',
-    senior_company: 'Razorpay',
+    client_id: 'client-2',
+    client_name: 'Arjun Mehta',
+    client_company: 'Razorpay',
     status: 'submitted',
     claimed_by: 'student-2',
     submission: {
@@ -241,9 +238,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['SQL', 'PostgreSQL'],
     difficulty: 'hard',
     time_estimate_min: 120,
-    senior_id: 'senior-3',
-    senior_name: 'Sneha Gupta',
-    senior_company: 'Microsoft',
+    client_id: 'client-3',
+    client_name: 'Sneha Gupta',
+    client_company: 'Microsoft',
     status: 'approved',
     claimed_by: 'student-3',
     submission: {
@@ -254,7 +251,7 @@ export const MOCK_TASKS: Task[] = [
       github_link: 'https://github.com/vikrampatel/sql-optimization',
       submission_text: 'Created a composite index on (user_id, created_at) and rewrote the subquery as a CTE. Query now runs in 85ms.',
       status: 'approved',
-      senior_feedback: 'Excellent work. Clean approach, good use of CTEs, and the EXPLAIN analysis was thorough.',
+      client_feedback: 'Excellent work. Clean approach, good use of CTEs, and the EXPLAIN analysis was thorough.',
       submitted_at: '2026-04-14T20:00:00Z',
       reviewed_at: '2026-04-15T09:00:00Z',
     },
@@ -268,9 +265,9 @@ export const MOCK_TASKS: Task[] = [
     stack: ['Terraform', 'AWS', 'Networking'],
     difficulty: 'hard',
     time_estimate_min: 200,
-    senior_id: 'senior-1',
-    senior_name: 'Priya Sharma',
-    senior_company: 'Google',
+    client_id: 'client-1',
+    client_name: 'Priya Sharma',
+    client_company: 'Google',
     status: 'open',
     match_score: 72,
     created_at: '2026-04-16T15:00:00Z',
@@ -304,15 +301,15 @@ export function getLeaderboard(): LeaderboardEntry[] {
 
 // ─── HELPERS ───────────────────────────────────────────────────────────
 export function getUserById(id: string): User | undefined {
-  return [...MOCK_STUDENTS, ...MOCK_SENIORS].find(u => u.id === id);
+  return [...MOCK_STUDENTS, ...MOCK_CLIENTS].find(u => u.id === id);
 }
 
 export function getTaskById(id: string): Task | undefined {
   return MOCK_TASKS.find(t => t.id === id);
 }
 
-export function getTasksBySenior(seniorId: string): Task[] {
-  return MOCK_TASKS.filter(t => t.senior_id === seniorId);
+export function getTasksByClient(clientId: string): Task[] {
+  return MOCK_TASKS.filter(t => t.client_id === clientId);
 }
 
 export function getKarmaEvents(userId: string): KarmaEvent[] {
@@ -323,6 +320,6 @@ export function getOpenTasks(): Task[] {
   return MOCK_TASKS.filter(t => t.status === 'open');
 }
 
-export function getPendingReviews(seniorId: string): Task[] {
-  return MOCK_TASKS.filter(t => t.senior_id === seniorId && t.status === 'submitted');
+export function getPendingReviews(clientId: string): Task[] {
+  return MOCK_TASKS.filter(t => t.client_id === clientId && t.status === 'submitted');
 }

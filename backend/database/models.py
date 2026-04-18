@@ -8,7 +8,7 @@ Base = declarative_base()
 
 class UserRole(str, enum.Enum):
     STUDENT = "student"
-    SENIOR = "senior"
+    CLIENT = "client"
 
 class Domain(str, enum.Enum):
     FRONTEND = "Frontend"
@@ -36,22 +36,34 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
-    domain = Column(Enum(Domain), nullable=False)
+    
+    # Profile fields (set during profile setup)
+    domain = Column(Enum(Domain), nullable=True)  # Can be null until profile setup
     skills = Column(JSON, default=[])
-    karma_score = Column(Integer, default=0)
     avatar_url = Column(String, default="")
     github_url = Column(String, default="")
-    company = Column(String, nullable=True)
-    mentor_score = Column(Integer, default=0)
+    bio = Column(String, default="")
+    
+    # Karma-based identity (no resume/experience)
+    karma_score = Column(Integer, default=0)
     tasks_completed = Column(Integer, default=0)
     tasks_posted = Column(Integer, default=0)
-    endorsements_received = Column(Integer, default=0)
+    
+    # Profile setup status
+    profile_completed = Column(Boolean, default=False)
+    
+    # Authentication
     google_id = Column(String, unique=True, nullable=True)
     hashed_password = Column(String, nullable=True)
+    
+    # Client-specific fields
+    company = Column(String, nullable=True)  # Only for clients
+    
+    # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    tasks_created = relationship("Task", back_populates="senior", foreign_keys="Task.senior_id")
+    tasks_created = relationship("Task", back_populates="client", foreign_keys="Task.client_id")
     tasks_claimed = relationship("Task", back_populates="student", foreign_keys="Task.claimed_by")
     karma_events = relationship("KarmaEvent", back_populates="user")
     submissions = relationship("TaskSubmission", back_populates="student")
@@ -65,14 +77,14 @@ class Task(Base):
     stack = Column(JSON, default=[])
     difficulty = Column(Enum(Difficulty), nullable=False)
     time_estimate_min = Column(Integer, nullable=False)
-    senior_id = Column(String, ForeignKey("users.id"), nullable=False)
+    client_id = Column(String, ForeignKey("users.id"), nullable=False)
     status = Column(Enum(TaskStatus), default=TaskStatus.OPEN)
     claimed_by = Column(String, ForeignKey("users.id"), nullable=True)
     match_score = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    senior = relationship("User", back_populates="tasks_created", foreign_keys=[senior_id])
+    client = relationship("User", back_populates="tasks_created", foreign_keys=[client_id])
     student = relationship("User", back_populates="tasks_claimed", foreign_keys=[claimed_by])
     submission = relationship("TaskSubmission", back_populates="task", uselist=False)
 
@@ -85,7 +97,7 @@ class TaskSubmission(Base):
     github_link = Column(String, nullable=False)
     submission_text = Column(String, nullable=False)
     status = Column(String, default="pending")
-    senior_feedback = Column(String, nullable=True)
+    client_feedback = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)
     attestation_uid = Column(String, nullable=True)  # EAS attestation UID
@@ -114,7 +126,7 @@ class ReferralRequest(Base):
     
     id = Column(String, primary_key=True)
     student_id = Column(String, ForeignKey("users.id"), nullable=False)
-    senior_id = Column(String, ForeignKey("users.id"), nullable=False)
+    client_id = Column(String, ForeignKey("users.id"), nullable=False)
     status = Column(String, default="pending")
     message = Column(String, nullable=False)
     karma_at_request = Column(Integer, nullable=False)

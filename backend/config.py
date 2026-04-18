@@ -16,10 +16,6 @@ GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/au
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./kramic.db")
 
-# Blockchain (EAS on Base)
-EAS_CONTRACT_ADDRESS = os.getenv("EAS_CONTRACT_ADDRESS", "0x4200000000000000000000000000000000000021")
-BASE_RPC_URL = os.getenv("BASE_RPC_URL", "https://mainnet.base.org")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "")  # For signing attestations
 
 # Liveblocks
 LIVEBLOCKS_SECRET_KEY = os.getenv("LIVEBLOCKS_SECRET_KEY", "")

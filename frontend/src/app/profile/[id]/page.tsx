@@ -13,7 +13,7 @@ export default function ProfilePage() {
     
     const user = getUserById(id as string);
     const karmaEvents = user ? getKarmaEvents(user.id) : [];
-    const userTasks = user ? MOCK_TASKS.filter(t => t.claimed_by === user.id || t.senior_id === user.id) : [];
+    const userTasks = user ? MOCK_TASKS.filter(t => t.claimed_by === user.id || t.client_id === user.id) : [];
 
     if (!user) {
         return (
