@@ -4,14 +4,14 @@ The agent uses GPT-4o with structured output to guarantee a valid Pydantic model
 containing title, stack, deliverable, micro_tasks, min_karma_required, etc.
 """
 import os
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from schemas import BountySpec
 from dotenv import load_dotenv
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
+llm = ChatOllama(model="minimax-m2.7:cloud", temperature=0.2)
 structured_llm = llm.with_structured_output(BountySpec)
 
 prompt = ChatPromptTemplate.from_messages([

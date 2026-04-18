@@ -196,45 +196,60 @@ export default function StarterTasksPage() {
 
   const handleSubmit = async (taskId: string) => {
     const link = githubLinks[taskId];
-    if (!link?.trim()) return;
+    if (!link?.trim() || !user) return;
 
     // Start analysis
     setTaskStates(prev => ({ ...prev, [taskId]: 'analyzing' }));
 
-    // Simulate AI analysis step by step
-    for (let i = 0; i < AI_ANALYSIS_STEPS.length; i++) {
-      setAnalysisStep(prev => ({ ...prev, [taskId]: i }));
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
-    }
-
-    // Generate results
     const task = STARTER_TASKS.find(t => t.id === taskId)!;
-    const passed = task.ai_criteria.map(() => Math.random() > 0.15); // ~85% pass rate per criterion
-    const passCount = passed.filter(Boolean).length;
-    const karmaEarned = Math.round(task.reward_karma * (passCount / passed.length));
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-    const newResults = {
-      ...analysisResults,
-      [taskId]: { passed, karma: karmaEarned },
-    };
-    const newTotalKarma = totalKarmaEarned + karmaEarned;
-    const newStates = { ...taskStates, [taskId]: 'completed' as TaskState };
+    // Set first few steps
+    setAnalysisStep(prev => ({ ...prev, [taskId]: 0 }));
+    await new Promise(r => setTimeout(r, 500));
+    setAnalysisStep(prev => ({ ...prev, [taskId]: 1 }));
 
-    setAnalysisResults(newResults);
-    setTotalKarmaEarned(newTotalKarma);
-    setTaskStates(newStates);
-    saveState(newStates, newResults, newTotalKarma);
+    try {
+        const response = await fetch(`${API_URL}/github/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: user.id,
+                github_url: link,
+                task_id: task.id,
+                task_title: task.title,
+                ai_criteria: task.ai_criteria,
+                reward_karma: task.reward_karma
+            })
+        });
 
-    // Update karma in Supabase if user exists
-    if (user?.id) {
-      try {
-        const currentKarma = user.karma_score || 0;
-        await supabase.from('profiles').update({
-          karma_score: currentKarma + karmaEarned,
-        }).eq('id', user.id);
-      } catch (e) {
-        console.error('Failed to update karma in Supabase:', e);
-      }
+        const data = await response.json();
+        
+        // Fast forward analysis steps
+        for (let i = 2; i < AI_ANALYSIS_STEPS.length; i++) {
+            setAnalysisStep(prev => ({ ...prev, [taskId]: i }));
+            await new Promise(r => setTimeout(r, 400));
+        }
+
+        if (data.success) {
+            const newResults = {
+                ...analysisResults,
+                [taskId]: { passed: data.passed, karma: data.karma_earned, feedback: data.feedback },
+            };
+            const newTotalKarma = totalKarmaEarned + data.karma_earned;
+            const newStates = { ...taskStates, [taskId]: 'completed' as TaskState };
+
+            setAnalysisResults(newResults);
+            setTotalKarmaEarned(newTotalKarma);
+            setTaskStates(newStates);
+            saveState(newStates, newResults, newTotalKarma);
+        } else {
+            console.error("Analysis failed", data);
+            setTaskStates(prev => ({ ...prev, [taskId]: 'open' }));
+        }
+    } catch (e) {
+        console.error('Failed to run backend analysis:', e);
+        setTaskStates(prev => ({ ...prev, [taskId]: 'open' }));
     }
   };
 

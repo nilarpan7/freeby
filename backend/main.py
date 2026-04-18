@@ -81,6 +81,8 @@ app.include_router(auth_router)
 app.include_router(task_router)
 app.include_router(user_router)
 app.include_router(sprint_router)
+from routes.github_routes import router as github_router
+app.include_router(github_router)
 
 @app.get("/")
 async def root():

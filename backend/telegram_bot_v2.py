@@ -390,12 +390,35 @@ async def review_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = tasks[idx]
     context.user_data['reviewing_task'] = task
 
+    submission_link = task.get('submission_link')
+    ai_feedback_msg = ""
+    
+    if submission_link and "github.com" in submission_link:
+        await update.message.reply_text("Fetching and analyzing student's GitHub repository. Please wait...")
+        from services.github_analyzer import analyze_github_repo
+        
+        # Use micro-tasks as criteria or a default criteria
+        micro_tasks = task.get('micro_tasks') or []
+        if isinstance(micro_tasks, list) and len(micro_tasks) > 0:
+            criteria = [mt.get('title', 'Unknown criteria') for mt in micro_tasks]
+        else:
+            criteria = ["Code executes without errors", "Requirements are met", "Code is clean and documented"]
+            
+        try:
+            analysis = analyze_github_repo(submission_link, task['title'], criteria)
+            passed = sum(analysis.passed_criteria)
+            total = len(criteria)
+            ai_feedback_msg = f"\n*🤖 AI Analysis Results:*\nPassed {passed}/{total} criteria.\n*Feedback:* {analysis.feedback}\n"
+        except Exception as e:
+            ai_feedback_msg = f"\n*🤖 AI Analysis Failed:* {str(e)}\n"
+
     reply_keyboard = [['Approve & Release Funds', 'Request Changes', 'Cancel Review']]
 
     await update.message.reply_text(
         f"*Reviewing:* {task['title']}\n\n"
-        f"*Submission Link:* {task.get('submission_link', 'None')}\n"
-        f"*Budget:* Rs.{task.get('reward_amount', 0)}\n\n"
+        f"*Submission Link:* {submission_link or 'None'}\n"
+        f"*Budget:* Rs.{task.get('reward_amount', 0)}\n"
+        f"{ai_feedback_msg}\n"
         f"What would you like to do?",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
         parse_mode="Markdown"
