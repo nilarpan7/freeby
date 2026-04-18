@@ -3,10 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, Zap, Clock, Code2, Send, Loader2, Sparkles, Trophy, ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Zap, Clock, Code2, Send, Loader2, Sparkles, Trophy, ArrowRight, ExternalLink, History, RotateCcw, XCircle } from 'lucide-react';
 import { HandDrawnFilters, Highlight, DifficultyBadge, SketchButton } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import QuestHistory from '@/app/dashboard/components/QuestHistory';
 
 // Github icon (lucide doesn't export it in this version)
 const GithubIcon = ({ size = 24, className = '' }: { size?: number; className?: string }) => (
@@ -149,7 +150,7 @@ const AI_ANALYSIS_STEPS = [
 ];
 
 type StarterTask = typeof STARTER_TASKS[0];
-type TaskState = 'open' | 'claimed' | 'submitting' | 'analyzing' | 'completed';
+type TaskState = 'open' | 'claimed' | 'submitting' | 'analyzing' | 'completed' | 'rejected';
 
 export default function StarterTasksPage() {
   const router = useRouter();
@@ -157,7 +158,7 @@ export default function StarterTasksPage() {
   const [taskStates, setTaskStates] = useState<Record<string, TaskState>>({});
   const [githubLinks, setGithubLinks] = useState<Record<string, string>>({});
   const [analysisStep, setAnalysisStep] = useState<Record<string, number>>({});
-  const [analysisResults, setAnalysisResults] = useState<Record<string, { passed: boolean[]; karma: number }>>({});
+  const [analysisResults, setAnalysisResults] = useState<Record<string, { passed: boolean[]; karma: number; feedback?: string }>>({});
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [totalKarmaEarned, setTotalKarmaEarned] = useState(0);
 
@@ -232,28 +233,45 @@ export default function StarterTasksPage() {
         }
 
         if (data.success) {
+            const allPassed = data.passed?.every((p: boolean) => p);
             const newResults = {
                 ...analysisResults,
                 [taskId]: { passed: data.passed, karma: data.karma_earned, feedback: data.feedback },
             };
-            const newTotalKarma = totalKarmaEarned + data.karma_earned;
-            const newStates = { ...taskStates, [taskId]: 'completed' as TaskState };
-
-            setAnalysisResults(newResults);
-            setTotalKarmaEarned(newTotalKarma);
-            setTaskStates(newStates);
-            saveState(newStates, newResults, newTotalKarma);
+            if (allPassed || data.karma_earned > 0) {
+                const newTotalKarma = totalKarmaEarned + data.karma_earned;
+                const newStates = { ...taskStates, [taskId]: 'completed' as TaskState };
+                setAnalysisResults(newResults);
+                setTotalKarmaEarned(newTotalKarma);
+                setTaskStates(newStates);
+                saveState(newStates, newResults, newTotalKarma);
+            } else {
+                // Quest rejected — not enough criteria passed
+                const newStates = { ...taskStates, [taskId]: 'rejected' as TaskState };
+                setAnalysisResults(newResults);
+                setTaskStates(newStates);
+                saveState(newStates, newResults, totalKarmaEarned);
+            }
         } else {
             console.error("Analysis failed", data);
-            setTaskStates(prev => ({ ...prev, [taskId]: 'open' }));
+            const newResults = { ...analysisResults, [taskId]: { passed: [], karma: 0, feedback: data.feedback || 'Analysis error' } };
+            setAnalysisResults(newResults);
+            setTaskStates(prev => ({ ...prev, [taskId]: 'rejected' as TaskState }));
         }
     } catch (e) {
         console.error('Failed to run backend analysis:', e);
-        setTaskStates(prev => ({ ...prev, [taskId]: 'open' }));
+        setTaskStates(prev => ({ ...prev, [taskId]: 'rejected' as TaskState }));
     }
   };
 
   const getTaskState = (taskId: string): TaskState => taskStates[taskId] || 'open';
+
+  const handleRetry = (taskId: string) => {
+    const newStates = { ...taskStates, [taskId]: 'claimed' as TaskState };
+    setTaskStates(newStates);
+    setExpandedTask(taskId);
+    saveState(newStates, analysisResults, totalKarmaEarned);
+  };
 
   if (isLoading) return (
     <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center font-black text-2xl">Loading...</div>
@@ -335,14 +353,20 @@ export default function StarterTasksPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
               className={`bg-white border-4 border-black relative overflow-hidden transition-all ${
-                state === 'completed' ? 'border-green-600 bg-green-50' : ''
+                state === 'completed' ? 'border-green-600 bg-green-50' :
+                state === 'rejected' ? 'border-red-500 bg-red-50' : ''
               }`}
               style={{ filter: "url(#rough-paper)" }}
             >
-              {/* Completed Stamp */}
+              {/* Status Stamp */}
               {state === 'completed' && (
                 <div className="absolute top-4 right-4 bg-green-600 text-white px-4 py-1 font-black text-sm uppercase rotate-3 shadow-lg">
                   Completed
+                </div>
+              )}
+              {state === 'rejected' && (
+                <div className="absolute top-4 right-4 bg-red-600 text-white px-4 py-1 font-black text-sm uppercase -rotate-2 shadow-lg">
+                  Rejected
                 </div>
               )}
 
@@ -354,9 +378,10 @@ export default function StarterTasksPage() {
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 flex items-center justify-center border-3 border-black font-black text-lg ${
                     state === 'completed' ? 'bg-green-400' : 
+                    state === 'rejected' ? 'bg-red-400' :
                     state === 'claimed' || state === 'analyzing' ? 'bg-amber-400' : 'bg-gray-100'
                   }`}>
-                    {state === 'completed' ? '✓' : idx + 1}
+                    {state === 'completed' ? '✓' : state === 'rejected' ? '✗' : idx + 1}
                   </div>
                   <div className="flex-1">
                     <h3 className="text-xl font-black mb-1">{task.title}</h3>
@@ -492,7 +517,7 @@ export default function StarterTasksPage() {
                                   {result.passed[i] ? (
                                     <CheckCircle2 size={16} className="text-green-600" />
                                   ) : (
-                                    <span className="text-red-600 font-bold text-base">✗</span>
+                                    <XCircle size={16} className="text-red-600" />
                                   )}
                                   <span className={result.passed[i] ? 'text-green-800' : 'text-red-700 line-through'}>
                                     {criteria}
@@ -508,6 +533,55 @@ export default function StarterTasksPage() {
                               </span>
                             </div>
                           </div>
+                        </div>
+                      )}
+
+                      {/* State: Rejected — Show results with RETRY */}
+                      {state === 'rejected' && result && (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-red-100 border-2 border-red-500">
+                            <div className="flex items-center gap-2 mb-3">
+                              <XCircle size={20} className="text-red-800" />
+                              <h4 className="font-black text-red-800">Quest Not Passed</h4>
+                            </div>
+                            
+                            <div className="space-y-2 mb-4">
+                              {task.ai_criteria.map((criteria, i) => (
+                                <div key={i} className="flex items-center gap-2 text-sm">
+                                  {result.passed?.[i] ? (
+                                    <CheckCircle2 size={16} className="text-green-600" />
+                                  ) : (
+                                    <XCircle size={16} className="text-red-600" />
+                                  )}
+                                  <span className={result.passed?.[i] ? 'text-green-800' : 'text-red-700'}>
+                                    {criteria}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {result.feedback && (
+                              <p className="text-sm text-red-700 bg-red-50 p-3 border border-red-300 mb-4">
+                                {typeof result.feedback === 'string' ? result.feedback : 'Some criteria were not met. Please review and try again.'}
+                              </p>
+                            )}
+
+                            <SketchButton onClick={() => handleRetry(task.id)} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white border-red-800">
+                              <RotateCcw size={16} /> Retry This Quest
+                            </SketchButton>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* State: Rejected with no result — just retry */}
+                      {state === 'rejected' && !result && (
+                        <div className="p-4 bg-red-100 border-2 border-red-500">
+                          <p className="text-red-800 font-medium text-sm mb-4">
+                            Analysis failed or encountered an error. You can retry with the same or a different repository.
+                          </p>
+                          <SketchButton onClick={() => handleRetry(task.id)} className="flex items-center gap-2">
+                            <RotateCcw size={16} /> Retry This Quest
+                          </SketchButton>
                         </div>
                       )}
                     </div>
@@ -534,6 +608,22 @@ export default function StarterTasksPage() {
             <SketchButton onClick={() => router.push('/tasks')} className="inline-flex items-center gap-2">
               <ArrowRight size={16} /> Browse Paid Tasks
             </SketchButton>
+          </motion.div>
+        )}
+
+        {/* Quest History */}
+        {user && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="mt-12 mb-8"
+          >
+            <h2 className="text-2xl font-black mb-6 flex items-center gap-2">
+              <History size={24} />
+              Submission <Highlight color="#fef3c7">History</Highlight>
+            </h2>
+            <QuestHistory userId={user.id} />
           </motion.div>
         )}
       </div>

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-llm = ChatOllama(model="gpt-oss:120b-cloud", temperature=0.7)
+llm = ChatOllama(model="minimax-m2.7:cloud", temperature=0.7)
 
 SYSTEM_PROMPT = """You are Kramic, an intelligent AI project manager and technical consultant. 
 Your goal is to help clients plan, architect, and manage freelance tasks for students.
@@ -65,9 +65,6 @@ Keep your conversational responses helpful, consultative, concise, and professio
 
 CHAT_STATE = 1
 
-# Review states
-REVIEW_SELECT, REVIEW_ACTION = range(10, 12)
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command -- initiate chat"""
     context.user_data.clear()
@@ -75,7 +72,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_msg = (
         "Hey! Welcome to Kramic Task Creator!\n\n"
-        "I'm an AI project manager and technical consultant. "
+        "I'm an AI project manager. I can answer questions, help you plan your project, "
+        "break it into sub-tasks (frontend, backend, etc.), and list it for students to work on.\n\n"
         "What would you like to build today?"
     )
     context.user_data['history'].append(AIMessage(content=welcome_msg))
@@ -83,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHAT_STATE
 
 async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle conversational AI via Langchain Bounded Prompts"""
+    """Handle conversation"""
     user_text = update.message.text
     
     if 'history' not in context.user_data:
@@ -92,10 +90,10 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = context.user_data['history']
     history.append(HumanMessage(content=user_text))
     
+    # Keep history manageable
     if len(history) > 20:
         history = history[-20:]
         
-    # Use LangChain bounded messages
     messages = [SystemMessage(content=SYSTEM_PROMPT)] + history
     
     await update.message.chat.send_action(action="typing")
@@ -103,10 +101,12 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = llm.invoke(messages)
         ai_text = response.content
+        
         history.append(AIMessage(content=ai_text))
         
         # Check for JSON actions
         if "```json" in ai_text:
+            # Parse the JSON block
             import re
             json_match = re.search(r'```json\n(.*?)\n```', ai_text, re.DOTALL)
             if json_match:
@@ -114,6 +114,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action_type = action_data.get("action")
                 
                 if action_type == "create_task":
+                    # Extract conversational part to send first
                     chat_part = ai_text.split("```json")[0].strip()
                     if chat_part:
                         await update.message.reply_text(chat_part)
@@ -123,6 +124,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         from telegram_agent import TelegramAgent
                         agent = TelegramAgent()
+                        
                         sb = get_supabase()
                         
                         difficulty = action_data.get("difficulty", "medium").lower()
@@ -190,6 +192,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                     return CHAT_STATE
 
+        # Normal message
         await update.message.reply_text(ai_text)
         
     except Exception as e:
@@ -208,250 +211,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# ──────────────────────────────────────────────
-# /review command — Client reviews submissions
-# ──────────────────────────────────────────────
-async def review_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show tasks with submissions for the client to review."""
-    telegram_id = update.effective_user.id
-    context.user_data['review_mode'] = True
+# Re-use the review handlers from telegram_bot_v2.py
+from telegram_bot_v2 import review_start, review_select, review_action, my_tasks, help_command, REVIEW_SELECT, REVIEW_ACTION
 
-    try:
-        from database.supabase_client import get_supabase
-        sb = get_supabase()
-
-        result = sb.table('solo_tasks').select('*').eq(
-            'client_telegram_id', telegram_id
-        ).eq('status', 'IN_REVIEW').execute()
-
-        tasks = result.data or []
-
-        if not tasks:
-            claimed = sb.table('solo_tasks').select('*').eq(
-                'client_telegram_id', telegram_id
-            ).eq('status', 'CLAIMED').execute()
-
-            if claimed.data:
-                task_list = "\n".join([
-                    f"  - *{t['title']}* (In Progress)"
-                    for t in claimed.data
-                ])
-                await update.message.reply_text(
-                    f"Your tasks that are currently being worked on:\n\n"
-                    f"{task_list}\n\n"
-                    f"No submissions to review yet. I'll notify you when a student submits!",
-                    parse_mode="Markdown"
-                )
-            else:
-                await update.message.reply_text(
-                    "You don't have any tasks with pending submissions.\n\n"
-                    "Use /start to create a new task, or /mytasks to see all your tasks."
-                )
-            return ConversationHandler.END
-
-        task_list = ""
-        for i, t in enumerate(tasks, 1):
-            task_list += (
-                f"\n*{i}. {t['title']}*\n"
-                f"   Budget: Rs.{t.get('reward_amount', 0)}\n"
-                f"   Submission: {t.get('submission_link', 'N/A')}\n"
-            )
-
-        context.user_data['review_tasks'] = tasks
-
-        await update.message.reply_text(
-            f"*Tasks Ready for Review:*\n"
-            f"{task_list}\n\n"
-            f"Reply with the task number (e.g. `1`) to review it.",
-            parse_mode="Markdown"
-        )
-        return REVIEW_SELECT
-
-    except Exception as e:
-        logger.error(f"Review error: {e}", exc_info=True)
-        await update.message.reply_text(
-            f"Error fetching tasks: {str(e)}"
-        )
-        return ConversationHandler.END
-
-
-async def review_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Select a task to review."""
-    text = update.message.text.strip()
-    tasks = context.user_data.get('review_tasks', [])
-
-    try:
-        idx = int(text) - 1
-        if idx < 0 or idx >= len(tasks):
-            raise ValueError()
-    except ValueError:
-        await update.message.reply_text(
-            f"Please enter a number between 1 and {len(tasks)}."
-        )
-        return REVIEW_SELECT
-
-    task = tasks[idx]
-    context.user_data['reviewing_task'] = task
-
-    submission_link = task.get('submission_link')
-    ai_feedback_msg = ""
-    
-    if submission_link and "github.com" in submission_link:
-        await update.message.reply_text("Fetching and analyzing student's GitHub repository. Please wait...")
-        from services.github_analyzer import analyze_github_repo
-        
-        micro_tasks = task.get('micro_tasks') or []
-        if isinstance(micro_tasks, list) and len(micro_tasks) > 0:
-            criteria = [mt.get('title', 'Unknown criteria') for mt in micro_tasks]
-        else:
-            criteria = ["Code executes without errors", "Requirements are met", "Code is clean and documented"]
-            
-        try:
-            analysis = analyze_github_repo(submission_link, task['title'], criteria)
-            passed = sum(analysis.passed_criteria)
-            total = len(criteria)
-            ai_feedback_msg = f"\n*🤖 AI Analysis Results:*\nPassed {passed}/{total} criteria.\n*Feedback:* {analysis.feedback}\n"
-        except Exception as e:
-            ai_feedback_msg = f"\n*🤖 AI Analysis Failed:* {str(e)}\n"
-
-    reply_keyboard = [['Approve & Release Funds', 'Request Changes', 'Cancel Review']]
-
-    await update.message.reply_text(
-        f"*Reviewing:* {task['title']}\n\n"
-        f"*Submission Link:* {submission_link or 'None'}\n"
-        f"*Budget:* Rs.{task.get('reward_amount', 0)}\n"
-        f"{ai_feedback_msg}\n"
-        f"What would you like to do?",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
-        parse_mode="Markdown"
-    )
-
-    return REVIEW_ACTION
-
-
-async def review_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process review action — approve or request changes."""
-    action = update.message.text.strip().lower()
-    task = context.user_data.get('reviewing_task')
-
-    if not task:
-        await update.message.reply_text(
-            "No task selected. Use /review to start again.",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
-
-    from database.supabase_client import get_supabase
-    sb = get_supabase()
-
-    if 'approve' in action:
-        try:
-            sb.table('solo_tasks').update({
-                'status': 'APPROVED'
-            }).eq('id', task['id']).execute()
-
-            await update.message.reply_text(
-                f"*Task Approved!*\n\n"
-                f"*{task['title']}* has been approved.\n"
-                f"Rs.{task.get('reward_amount', 0)} released to the student. (mock)\n"
-                f"The student will receive karma points!\n\n"
-                f"Thank you for using Kramic!",
-                reply_markup=ReplyKeyboardRemove(),
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            await update.message.reply_text(
-                f"Error approving task: {str(e)}",
-                reply_markup=ReplyKeyboardRemove()
-            )
-    elif 'changes' in action or 'revision' in action:
-        try:
-            sb.table('solo_tasks').update({
-                'status': 'CLAIMED'
-            }).eq('id', task['id']).execute()
-
-            await update.message.reply_text(
-                f"Sent *{task['title']}* back for revisions.\n"
-                f"The student will be notified.\n\n"
-                f"Use /review again when they resubmit.",
-                reply_markup=ReplyKeyboardRemove(),
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            await update.message.reply_text(
-                f"Error: {str(e)}",
-                reply_markup=ReplyKeyboardRemove()
-            )
-    else:
-        await update.message.reply_text(
-            "Review cancelled.",
-            reply_markup=ReplyKeyboardRemove()
-        )
-
-    context.user_data.clear()
-    return ConversationHandler.END
-
-
-async def my_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show all tasks for this Telegram user."""
-    telegram_id = update.effective_user.id
-    try:
-        from database.supabase_client import get_supabase
-        sb = get_supabase()
-        result = sb.table('solo_tasks').select('*').eq(
-            'client_telegram_id', telegram_id
-        ).order('created_at', desc=True).execute()
-
-        tasks = result.data or []
-        if not tasks:
-            await update.message.reply_text(
-                "You haven't created any tasks yet.\n"
-                "Just chat with me to create your first task!"
-            )
-            return
-
-        status_emoji = {
-            'OPEN': '[OPEN]',
-            'CLAIMED': '[IN PROGRESS]',
-            'IN_REVIEW': '[REVIEW NEEDED]',
-            'APPROVED': '[DONE]',
-        }
-
-        task_list = ""
-        for t in tasks:
-            status = status_emoji.get(t.get('status', ''), t.get('status', ''))
-            task_list += (
-                f"\n{status} *{t['title']}*\n"
-                f"   Budget: Rs.{t.get('reward_amount', 0)} | "
-                f"Karma req: {t.get('min_karma', 0)}\n"
-            )
-
-        await update.message.reply_text(
-            f"*Your Tasks:*\n{task_list}\n\n"
-            f"Use /review to approve submitted work.",
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"Error: {str(e)}")
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show help info."""
-    await update.message.reply_text(
-        "*Kramic AI Task Bot*\n\n"
-        "I am a conversational AI project manager. Just chat with me to plan and post your freelance tasks!\n\n"
-        "*Commands:*\n"
-        "/start -- Start a new chat session\n"
-        "/mytasks -- View your tasks\n"
-        "/review -- Review & approve student work\n"
-        "/cancel -- Reset the chat\n"
-        "/help -- Show this message\n\n"
-        "Just say 'I want to build a website...' and I will guide you!",
-        parse_mode="Markdown"
-    )
-
-
-def start_telegram_bot():
+def start_conversational_bot():
     """Start the new Agentic Telegram bot."""
     if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "your_bot_token_here":
         print("[WARN] TELEGRAM_BOT_TOKEN not configured. Skipping bot.")
@@ -466,7 +229,6 @@ def start_telegram_bot():
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # The main conversational state
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start), MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)],
         states={
@@ -475,7 +237,6 @@ def start_telegram_bot():
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
-    # Review workflow
     review_handler = ConversationHandler(
         entry_points=[CommandHandler('review', review_start)],
         states={
@@ -495,4 +256,4 @@ def start_telegram_bot():
     app.run_polling()
 
 if __name__ == "__main__":
-    start_telegram_bot()
+    start_conversational_bot()

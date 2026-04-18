@@ -15,7 +15,10 @@ import {
   DollarSign,
   AlertTriangle,
   GitBranch,
-  Loader2
+  Loader2,
+  UserPlus,
+  RotateCcw,
+  XCircle
 } from 'lucide-react';
 
 // Github icon doesn't exist in this lucide version — use a custom SVG
@@ -27,7 +30,7 @@ const GithubIcon = ({ size = 24, className = '' }: { size?: number; className?: 
 );
 import { HandDrawnFilters, Highlight, DifficultyBadge, SketchButton, SketchTextarea } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
-import { taskApi } from '@/lib/api';
+import { taskApi, referralApi } from '@/lib/api';
 
 interface Task {
   id: string;
@@ -64,6 +67,9 @@ export default function TaskDetailPage() {
   const [submissionText, setSubmissionText] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [referralUserId, setReferralUserId] = useState('');
+  const [referringTask, setReferringTask] = useState(false);
+  const [isRejected, setIsRejected] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -120,11 +126,33 @@ export default function TaskDetailPage() {
         submission_text: submissionText.trim(),
       });
       await loadTask();
-      setSuccess('Submission received! The client will review your work and the AI will analyze it. Task is pending approval.');
+      setSuccess('Submission received! The client will review your work and the AI will analyze it.');
+      setIsRejected(false);
+      // Notify client via Telegram
+      referralApi.notifyTaskUpdate(task!.id, 'submitted').catch(() => {});
     } catch (error: any) {
       setError(error.message || 'Failed to submit task');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRefer = async () => {
+    if (!referralUserId.trim() || !task || !user) return;
+    try {
+      setReferringTask(true);
+      setError('');
+      await referralApi.referUser({
+        referrer_id: user.id,
+        referred_user_id: referralUserId.trim(),
+        task_id: task.id,
+      });
+      setSuccess('Referral sent! They will be notified via Telegram.');
+      setReferralUserId('');
+    } catch (err: any) {
+      setError(err.message || 'Referral failed');
+    } finally {
+      setReferringTask(false);
     }
   };
 
@@ -459,6 +487,56 @@ export default function TaskDetailPage() {
                 </motion.div>
               )}
 
+              {/* REJECTED — Allow resubmission */}
+              {isMyTask() && (task.status === 'revision_requested' || isRejected) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-50 border-4 border-red-500 p-8"
+                  style={{ filter: "url(#rough-paper)" }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <XCircle size={24} className="text-red-700" />
+                    <h2 className="text-2xl font-black text-red-800">Submission Rejected</h2>
+                  </div>
+                  <p className="text-red-700 font-medium mb-6">
+                    Your submission was not accepted. Please review the feedback, make improvements, and resubmit.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="group relative">
+                      <GithubIcon className="absolute left-4 top-3.5 text-gray-400 group-focus-within:text-black transition-colors z-10" size={18} />
+                      <input
+                        type="url"
+                        placeholder="https://github.com/yourusername/updated-repo"
+                        value={githubLink}
+                        onChange={(e) => setGithubLink(e.target.value)}
+                        className="w-full bg-white border-2 border-black rounded-xl py-3 pl-12 pr-4 text-black font-medium focus:outline-none focus:shadow-[4px_4px_0px_rgba(0,0,0,1)] transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+
+                    <SketchTextarea
+                      placeholder="Describe what you changed..."
+                      value={submissionText}
+                      onChange={(e) => setSubmissionText(e.target.value)}
+                      rows={3}
+                    />
+
+                    <SketchButton
+                      onClick={handleSubmit}
+                      disabled={submitting || !githubLink.trim()}
+                      className="flex items-center gap-2"
+                    >
+                      {submitting ? (
+                        <><Loader2 className="animate-spin" size={16} /> Resubmitting...</>
+                      ) : (
+                        <><RotateCcw size={16} /> Resubmit Work</>
+                      )}
+                    </SketchButton>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Approved Status */}
               {isMyTask() && task.status === 'approved' && (
                 <motion.div
@@ -572,6 +650,41 @@ export default function TaskDetailPage() {
                   </div>
                 </div>
               </motion.div>
+
+              {/* Referral Card */}
+              {user && task.status === 'open' && user.karma_score >= 30 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="bg-purple-50 border-4 border-purple-600 p-6"
+                  style={{ filter: "url(#rough-paper)" }}
+                >
+                  <h3 className="font-black mb-2 text-purple-800 flex items-center gap-2">
+                    <UserPlus size={18} /> Refer Someone
+                  </h3>
+                  <p className="text-sm text-purple-700 mb-3">
+                    Earn 10% bonus karma when they complete this task. Risk: lose 5% if rejected.
+                  </p>
+
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Paste user ID"
+                      value={referralUserId}
+                      onChange={(e) => setReferralUserId(e.target.value)}
+                      className="w-full bg-white border-2 border-black py-2 px-3 text-sm font-medium focus:outline-none"
+                    />
+                    <button
+                      onClick={handleRefer}
+                      disabled={referringTask || !referralUserId.trim()}
+                      className="w-full py-2 bg-purple-600 text-white font-black text-sm border-2 border-black hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                    >
+                      {referringTask ? 'Referring...' : 'Send Referral'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
             </div>
           </div>
         )}

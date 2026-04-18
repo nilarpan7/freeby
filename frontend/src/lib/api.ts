@@ -374,3 +374,99 @@ export const sprintApi = {
     return data;
   },
 };
+
+// Quest Analysis API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+export const questApi = {
+  async submitQuest(data: {
+    student_id: string;
+    quest_id: string;
+    quest_type: string;
+    github_url: string;
+    quest_title: string;
+    ai_criteria: string[];
+    reward_karma: number;
+  }) {
+    const resp = await fetch(`${API_URL}/quests/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) throw new ApiError(resp.status, await resp.text());
+    return resp.json();
+  },
+
+  async getSubmission(submissionId: string) {
+    const resp = await fetch(`${API_URL}/quests/submission/${submissionId}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Submission not found');
+    return resp.json();
+  },
+
+  async getHistory(studentId: string, questType?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (questType) params.set('quest_type', questType);
+    if (status) params.set('status', status);
+    const resp = await fetch(`${API_URL}/quests/history/${studentId}?${params}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to fetch history');
+    return resp.json();
+  },
+
+  async getStats(studentId: string) {
+    const resp = await fetch(`${API_URL}/quests/stats/${studentId}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to fetch stats');
+    return resp.json();
+  },
+
+  async getKarmaGraph(studentId: string) {
+    const resp = await fetch(`${API_URL}/quests/karma-graph/${studentId}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to fetch karma graph');
+    return resp.json();
+  },
+
+  async reanalyze(submissionId: string) {
+    const resp = await fetch(`${API_URL}/quests/reanalyze/${submissionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to start re-analysis');
+    return resp.json();
+  },
+};
+
+// Referral API
+export const referralApi = {
+  async referUser(data: { referrer_id: string; referred_user_id: string; task_id: string }) {
+    const resp = await fetch(`${API_URL}/referrals/refer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Referral failed' }));
+      throw new ApiError(resp.status, err.detail || 'Referral failed');
+    }
+    return resp.json();
+  },
+
+  async getMyReferrals(userId: string) {
+    const resp = await fetch(`${API_URL}/referrals/my-referrals/${userId}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to fetch referrals');
+    return resp.json();
+  },
+
+  async resolveReferral(referralId: string, outcome: 'completed' | 'rejected') {
+    const resp = await fetch(`${API_URL}/referrals/resolve/${referralId}?outcome=${outcome}`, {
+      method: 'POST',
+    });
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to resolve referral');
+    return resp.json();
+  },
+
+  async notifyTaskUpdate(taskId: string, event: string, details?: string) {
+    const resp = await fetch(`${API_URL}/referrals/notify-task-update?task_id=${taskId}&event=${event}&details=${encodeURIComponent(details || '')}`, {
+      method: 'POST',
+    });
+    return resp.json();
+  },
+};

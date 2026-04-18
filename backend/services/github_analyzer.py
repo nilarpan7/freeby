@@ -9,7 +9,7 @@ from typing import List
 # Use PyGithub without token for public repos, or with token if provided
 g = Github(os.environ.get("GITHUB_TOKEN"))
 
-llm = ChatOllama(model="minimax-m2.7:cloud", temperature=0.1)
+llm = ChatOllama(model="gpt-oss:120b-cloud", temperature=0.1)
 
 class AnalysisResult(BaseModel):
     passed_criteria: List[bool] = Field(description="List of booleans representing if each criterion passed or failed in the same order as provided.")

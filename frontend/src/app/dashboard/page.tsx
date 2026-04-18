@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3 } from 'lucide-react';
+import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3, History } from 'lucide-react';
 import { HandDrawnFilters, Highlight, KarmaBadge, DifficultyBadge, ProgressRing, StatusPill } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
 import { taskApi } from '@/lib/api';
 import type { Task, Difficulty } from '@/lib/types';
+import KarmaWorkGraph from './components/KarmaWorkGraph';
+import QuestHistory from './components/QuestHistory';
 
 export default function StudentDashboard() {
     const router = useRouter();
@@ -18,6 +20,7 @@ export default function StudentDashboard() {
     const [allTasks, setAllTasks] = useState<any[]>([]);
     const [myTasks, setMyTasks] = useState<any[]>([]);
     const [tasksLoading, setTasksLoading] = useState(true);
+    const [karmaGraphOpen, setKarmaGraphOpen] = useState(false);
 
     useEffect(() => {
         if (isLoading) return; // Wait for auth to resolve
@@ -92,6 +95,12 @@ export default function StudentDashboard() {
                     Kramic<span className="text-amber-500">.sh</span>
                 </div>
                 <div className="hidden md:flex items-center gap-6">
+                    <button onClick={() => router.push('/starter')} className="flex items-center gap-1.5 font-bold text-sm hover:text-amber-600 transition-colors">
+                        <Zap size={16} /> Quests
+                    </button>
+                    <button onClick={() => router.push('/tasks')} className="flex items-center gap-1.5 font-bold text-sm hover:text-amber-600 transition-colors">
+                        <Code2 size={16} /> Tasks
+                    </button>
                     <button onClick={() => router.push('/leaderboard')} className="flex items-center gap-1.5 font-bold text-sm hover:text-amber-600 transition-colors">
                         <Trophy size={16} /> Leaderboard
                     </button>
@@ -100,7 +109,9 @@ export default function StudentDashboard() {
                     </button>
                 </div>
                 <div className="flex items-center gap-4">
-                    <KarmaBadge score={user.karma_score} size="sm" />
+                    <div className="cursor-pointer" onClick={() => setKarmaGraphOpen(true)} title="View Karma Work Graph">
+                        <KarmaBadge score={user.karma_score} size="sm" />
+                    </div>
                     <div
                         className="h-10 w-10 rounded-full border-2 border-black bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-white text-sm cursor-pointer"
                         style={{ filter: "url(#rough-paper)" }}
@@ -297,6 +308,21 @@ export default function StudentDashboard() {
                     </div>
                 )}
 
+                {/* ── QUEST HISTORY ── */}
+                <div className="mb-12">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 }}
+                    >
+                        <h2 className="text-2xl font-black mb-6 flex items-center gap-2">
+                            <History size={24} />
+                            Quest <Highlight color="#bbf7d0">History</Highlight>
+                        </h2>
+                        <QuestHistory userId={user.id} />
+                    </motion.div>
+                </div>
+
                 {/* ── TASK FEED ── */}
                 <div>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -398,6 +424,14 @@ export default function StudentDashboard() {
                 {/* ── RECENT KARMA ── */}
                 {/* Karma activity section — will show when attestations exist */}
             </div>
+
+            {/* Karma Work Graph Modal */}
+            <KarmaWorkGraph
+                userId={user.id}
+                currentKarma={user.karma_score}
+                isOpen={karmaGraphOpen}
+                onClose={() => setKarmaGraphOpen(false)}
+            />
         </main>
     );
 }

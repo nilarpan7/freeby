@@ -86,3 +86,102 @@ export interface LeaderboardEntry {
   trend: 'up' | 'down' | 'stable';
   tasks_this_week: number;
 }
+
+// ─── Quest Analysis Pipeline Types ───
+
+export interface CriterionResult {
+  criterion: string;
+  passed: boolean;
+  evidence: string;
+}
+
+export interface CodeError {
+  file: string;
+  line: number | null;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  category: string;
+  suggestion?: string;
+  fixed_code?: string;
+}
+
+export interface StructureReport {
+  languages: string[];
+  framework: string | null;
+  has_readme: boolean;
+  has_tests: boolean;
+  has_package_json: boolean;
+  file_count: number;
+  project_type: string;
+  entry_point: string | null;
+}
+
+export interface ErrorResolution {
+  error_index: number;
+  suggestion: string;
+  fixed_code: string | null;
+}
+
+export interface QuestSubmission {
+  id: string;
+  student_id: string;
+  quest_id: string;
+  quest_type: 'starter' | 'solo';
+  github_url: string;
+  status: 'pending' | 'analyzing' | 'passed' | 'failed' | 'error';
+  attempt_number: number;
+  analysis_summary: string | null;
+  criteria_results: CriterionResult[];
+  error_report: CodeError[];
+  structure_report: StructureReport;
+  criteria_passed: number;
+  criteria_total: number;
+  karma_earned: number;
+  score_pct: number;
+  files_analyzed: number;
+  analysis_duration_ms: number | null;
+  model_used: string | null;
+  created_at: string;
+  completed_at: string | null;
+  passes?: AnalysisPass[];
+}
+
+export interface AnalysisPass {
+  id: string;
+  submission_id: string;
+  pass_number: number;
+  pass_type: string;
+  output_parsed: any;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface QuestStats {
+  total_submissions: number;
+  total_passed: number;
+  total_failed: number;
+  total_karma_earned: number;
+  avg_score: number;
+  quests_completed: string[];
+}
+
+export interface KarmaGraphEvent {
+  type: string;
+  title: string;
+  delta: number;
+}
+
+export interface KarmaGraphDay {
+  date: string;
+  karma_earned: number;
+  events: KarmaGraphEvent[];
+  cumulative: number;
+}
+
+export interface KarmaGraphData {
+  current_karma: number;
+  daily_data: KarmaGraphDay[];
+  recent_submissions: QuestSubmission[];
+  total_events: number;
+}
+

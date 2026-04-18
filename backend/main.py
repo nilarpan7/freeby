@@ -83,6 +83,10 @@ app.include_router(user_router)
 app.include_router(sprint_router)
 from routes.github_routes import router as github_router
 app.include_router(github_router)
+from routes.quest_routes import router as quest_router
+app.include_router(quest_router)
+from routes.referral_routes import router as referral_router
+app.include_router(referral_router)
 
 @app.get("/")
 async def root():
