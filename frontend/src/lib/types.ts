@@ -1,6 +1,6 @@
 // Kramic.sh — Core TypeScript Interfaces
 
-export type UserRole = 'student' | 'senior';
+export type UserRole = 'student' | 'client';
 export type Domain = 'Frontend' | 'Backend' | 'Data' | 'DevOps';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type TaskStatus = 'open' | 'claimed' | 'submitted' | 'approved' | 'flagged' | 'revision';
@@ -11,16 +11,16 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  domain: Domain;
+  domain?: Domain;  // Optional until profile setup
   skills: string[];
   karma_score: number;
   avatar_url: string;
   github_url: string;
-  company?: string;       // Only for seniors
-  mentor_score?: number;  // Only for seniors
+  bio?: string;
+  company?: string;       // Only for clients
+  profile_completed: boolean;
   tasks_completed: number;
   tasks_posted: number;
-  endorsements_received: number;
   created_at: string;
 }
 
@@ -31,9 +31,9 @@ export interface Task {
   stack: string[];
   difficulty: Difficulty;
   time_estimate_min: number;
-  senior_id: string;
-  senior_name: string;
-  senior_company: string;
+  client_id: string;
+  client_name: string;
+  client_company: string;
   status: TaskStatus;
   claimed_by?: string;
   submission?: TaskSubmission;
@@ -49,7 +49,7 @@ export interface TaskSubmission {
   github_link: string;
   submission_text: string;
   status: 'pending' | 'approved' | 'flagged' | 'revision';
-  senior_feedback?: string;
+  client_feedback?: string;
   submitted_at: string;
   reviewed_at?: string;
 }
@@ -69,9 +69,9 @@ export interface ReferralRequest {
   id: string;
   student_id: string;
   student_name: string;
-  senior_id: string;
-  senior_name: string;
-  senior_company: string;
+  client_id: string;
+  client_name: string;
+  client_company: string;
   status: ReferralStatus;
   message: string;
   karma_at_request: number;

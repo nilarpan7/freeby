@@ -94,12 +94,12 @@ async def verify_google_token(token: str) -> dict:
             detail=f"Invalid Google token: {str(e)}",
         )
 
-def get_current_senior(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to ensure user is a senior"""
-    if current_user.role != "senior":
+def get_current_client(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency to ensure user is a client"""
+    if current_user.role != "client":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only seniors can access this resource",
+            detail="Only clients can access this resource",
         )
     return current_user
 

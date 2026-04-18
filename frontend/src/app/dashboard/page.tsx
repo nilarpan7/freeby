@@ -19,6 +19,8 @@ export default function StudentDashboard() {
     useEffect(() => {
         if (!user) {
             router.push('/auth?role=student');
+        } else if (!user.profile_completed) {
+            router.push('/auth/setup');
         }
     }, [user, router]);
 
@@ -174,7 +176,7 @@ export default function StudentDashboard() {
                                             <h3 className="font-bold text-lg">{task.title}</h3>
                                             <StatusPill status={task.status} />
                                         </div>
-                                        <p className="text-sm text-gray-500 font-medium">{task.senior_name} • {task.senior_company}</p>
+                                        <p className="text-sm text-gray-500 font-medium">{task.client_name} • {task.client_company}</p>
                                     </div>
                                 </motion.div>
                             ))}
@@ -266,7 +268,7 @@ export default function StudentDashboard() {
                                                     <Clock size={14} /> {task.time_estimate_min}m
                                                 </div>
                                                 <span className="text-xs text-gray-400 font-medium">
-                                                    {task.senior_name}
+                                                    {task.client_name}
                                                 </span>
                                             </div>
                                             <span className="font-bold text-sm flex items-center gap-1 group-hover:text-amber-600 transition-colors">

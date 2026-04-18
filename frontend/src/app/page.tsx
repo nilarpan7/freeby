@@ -12,15 +12,15 @@ export default function LandingPage() {
     const yDoodle = useTransform(scrollYProgress, [0, 1], [0, -100]);
 
     const steps = [
-        { num: '01', title: 'Complete Tasks', desc: 'Browse micro-tasks posted by senior engineers at top companies. Claim, build, submit.', icon: <Code2 size={28} />, color: '#a5f3fc' },
+        { num: '01', title: 'Complete Tasks', desc: 'Browse micro-tasks posted by clients at top companies. Claim, build, submit.', icon: <Code2 size={28} />, color: '#a5f3fc' },
         { num: '02', title: 'Earn Karma', desc: 'Every approved task earns +10 Karma. Get peer endorsements. Build your reputation graph.', icon: <Zap size={28} />, color: '#ffeb3b' },
-        { num: '03', title: 'Unlock Referrals', desc: 'Hit 500 Karma and request direct internal referrals from seniors who vouched for your work.', icon: <Rocket size={28} />, color: '#bbf7d0' },
+        { num: '03', title: 'Unlock Referrals', desc: 'Hit 500 Karma and request direct internal referrals from clients who vouched for your work.', icon: <Rocket size={28} />, color: '#bbf7d0' },
     ];
 
     const stats = [
         { value: '2,400+', label: 'Tasks Completed' },
         { value: '500+', label: 'Active Students' },
-        { value: '85', label: 'Senior Mentors' },
+        { value: '85', label: 'Clients' },
         { value: '47', label: 'Referrals Made' },
     ];
 
@@ -44,7 +44,7 @@ export default function LandingPage() {
                     Kramic<span className="text-amber-500">.sh</span>
                 </div>
                 <div className="hidden gap-8 md:flex font-medium">
-                    {['How It Works', 'For Seniors', 'Leaderboard'].map(item => (
+                    {['How It Works', 'For Clients', 'Leaderboard'].map(item => (
                         <a key={item} href={`#${item.toLowerCase().replace(/ /g, '-')}`} className="relative group p-2 text-sm">
                             {item}
                             <span className="absolute -bottom-1 left-2 h-0.5 w-0 bg-black transition-all group-hover:w-[calc(100%-16px)] rounded-full" />
@@ -91,7 +91,7 @@ export default function LandingPage() {
                     transition={{ duration: 0.6, delay: 0.3 }}
                     className="max-w-2xl text-xl text-gray-600 font-medium leading-relaxed"
                 >
-                    Complete real micro-tasks from senior engineers. Build verifiable karma.
+                    Complete real micro-tasks from top-tier engineers. Build verifiable karma.
                     Bypass ATS filters. Get referred directly to full-time roles.
                 </motion.p>
 
@@ -109,11 +109,11 @@ export default function LandingPage() {
                         I&apos;m a Student
                     </button>
                     <button
-                        onClick={() => router.push('/auth?role=senior')}
+                        onClick={() => router.push('/auth?role=client')}
                         className="flex items-center justify-center gap-3 bg-white border-4 border-black px-8 py-4 font-bold shadow-[8px_8px_0px_#a5f3fc] hover:shadow-[12px_12px_0px_#a5f3fc] hover:-translate-y-1 transition-all sketch-border-2"
                     >
                         <Star size={20} />
-                        I&apos;m a Senior Engineer
+                        I&apos;m a Client
                     </button>
                 </motion.div>
 
@@ -187,8 +187,8 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* ── FOR STUDENTS vs FOR SENIORS ── */}
-            <section id="for-seniors" className="mx-auto max-w-5xl px-6 py-28">
+            {/* ── FOR STUDENTS vs FOR CLIENTS ── */}
+            <section id="for-clients" className="mx-auto max-w-5xl px-6 py-28">
                 <div className="text-center mb-16">
                     <h2 className="text-4xl md:text-5xl font-black">Two Sides. <Highlight color="#fed7aa">One Graph.</Highlight></h2>
                 </div>
@@ -221,7 +221,7 @@ export default function LandingPage() {
                         </div>
                     </motion.div>
 
-                    {/* Seniors */}
+                    {/* Clients */}
                     <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         whileInView={{ opacity: 1, x: 0 }}
@@ -229,7 +229,7 @@ export default function LandingPage() {
                         className="p-8 border-4 border-black bg-black text-white sketch-border-2"
                         style={{ filter: "url(#rough-paper)" }}
                     >
-                        <h3 className="text-2xl font-black mb-4 text-amber-400">For Senior Engineers</h3>
+                        <h3 className="text-2xl font-black mb-4 text-amber-400">For Clients</h3>
                         <p className="mb-6 text-gray-400 font-medium leading-relaxed">
                             Post real tasks. Review student work. Earn referral bonuses when they get hired.
                         </p>
@@ -238,7 +238,7 @@ export default function LandingPage() {
                                 "Post Micro-Tasks in Minutes",
                                 "Pass / Flag Review Dashboard",
                                 "Earn Referral Bonuses (₹10K–₹50K)",
-                                "Build Your Mentor Score"
+                                "Build Your Client Score"
                             ].map((item, i) => (
                                 <div key={i} className="flex items-center gap-3 text-[#f0f0f0]">
                                     <Zap className="text-amber-400 w-5 h-5 flex-shrink-0" />
@@ -301,10 +301,10 @@ export default function LandingPage() {
                             Start as Student <ArrowRight size={20} />
                         </button>
                         <button
-                            onClick={() => router.push('/auth?role=senior')}
+                            onClick={() => router.push('/auth?role=client')}
                             className="flex items-center justify-center gap-3 bg-black text-white border-2 border-black px-10 py-5 font-black text-lg shadow-[4px_4px_0px_rgba(255,255,255,0.3)] hover:shadow-[6px_6px_0px_rgba(255,255,255,0.3)] hover:-translate-y-1 transition-all"
                         >
-                            Join as Senior <Star size={20} />
+                            Join as Client <Star size={20} />
                         </button>
                     </div>
                 </motion.div>

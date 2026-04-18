@@ -7,8 +7,8 @@ import uuid
 
 from database.database import get_db
 from database.models import Task, User, TaskSubmission, KarmaEvent, TaskStatus, Difficulty
-from auth import get_current_user, get_current_senior, get_current_student
-from blockchain import blockchain_service
+from auth import get_current_user, get_current_client, get_current_student
+
 
 router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
@@ -47,7 +47,7 @@ async def get_tasks(
     
     result = []
     for task in tasks:
-        senior = db.query(User).filter(User.id == task.senior_id).first()
+        client = db.query(User).filter(User.id == task.client_id).first()
         submission = None
         if task.submission:
             submission = {
@@ -57,7 +57,7 @@ async def get_tasks(
                 "github_link": task.submission.github_link,
                 "submission_text": task.submission.submission_text,
                 "status": task.submission.status,
-                "senior_feedback": task.submission.senior_feedback,
+                "client_feedback": task.submission.client_feedback,
                 "submitted_at": task.submission.submitted_at.isoformat(),
                 "reviewed_at": task.submission.reviewed_at.isoformat() if task.submission.reviewed_at else None
             }
@@ -69,9 +69,9 @@ async def get_tasks(
             "stack": task.stack,
             "difficulty": task.difficulty,
             "time_estimate_min": task.time_estimate_min,
-            "senior_id": task.senior_id,
-            "senior_name": senior.name if senior else "Unknown",
-            "senior_company": senior.company if senior else "Unknown",
+            "client_id": task.client_id,
+            "client_name": client.name if client else "Unknown",
+            "client_company": client.company if client else "Unknown",
             "status": task.status,
             "claimed_by": task.claimed_by,
             "submission": submission,
@@ -92,7 +92,7 @@ async def get_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    senior = db.query(User).filter(User.id == task.senior_id).first()
+    client = db.query(User).filter(User.id == task.client_id).first()
     submission = None
     if task.submission:
         submission = {
@@ -102,7 +102,7 @@ async def get_task(
             "github_link": task.submission.github_link,
             "submission_text": task.submission.submission_text,
             "status": task.submission.status,
-            "senior_feedback": task.submission.senior_feedback,
+            "client_feedback": task.submission.client_feedback,
             "submitted_at": task.submission.submitted_at.isoformat(),
             "reviewed_at": task.submission.reviewed_at.isoformat() if task.submission.reviewed_at else None
         }
@@ -114,9 +114,9 @@ async def get_task(
         "stack": task.stack,
         "difficulty": task.difficulty,
         "time_estimate_min": task.time_estimate_min,
-        "senior_id": task.senior_id,
-        "senior_name": senior.name if senior else "Unknown",
-        "senior_company": senior.company if senior else "Unknown",
+        "client_id": task.client_id,
+        "client_name": client.name if client else "Unknown",
+        "client_company": client.company if client else "Unknown",
         "status": task.status,
         "claimed_by": task.claimed_by,
         "submission": submission,
@@ -128,9 +128,9 @@ async def get_task(
 async def create_task(
     request: CreateTaskRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_senior)
+    current_user: User = Depends(get_current_client)
 ):
-    """Create a new task (seniors only)"""
+    """Create a new task (clients only)"""
     task = Task(
         id=f"task-{uuid.uuid4()}",
         title=request.title,
@@ -138,7 +138,7 @@ async def create_task(
         stack=request.stack,
         difficulty=request.difficulty,
         time_estimate_min=request.time_estimate_min,
-        senior_id=current_user.id,
+        client_id=current_user.id,
         status=TaskStatus.OPEN,
         match_score=85  # TODO: Implement AI matching
     )
@@ -209,14 +209,14 @@ async def review_task(
     task_id: str,
     request: ReviewTaskRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_senior)
+    current_user: User = Depends(get_current_client)
 ):
-    """Review a submitted task (seniors only)"""
+    """Review a submitted task (clients only)"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    if task.senior_id != current_user.id:
+    if task.client_id != current_user.id:
         raise HTTPException(status_code=403, detail="You didn't create this task")
     
     if not task.submission:
@@ -228,7 +228,7 @@ async def review_task(
     if request.action == "approve":
         # Approve task
         submission.status = "approved"
-        submission.senior_feedback = request.feedback
+        submission.client_feedback = request.feedback
         submission.reviewed_at = datetime.utcnow()
         task.status = TaskStatus.APPROVED
         
@@ -249,19 +249,7 @@ async def review_task(
         )
         db.add(karma_event)
         
-        # Mint EAS attestation
-        if student.github_url:
-            # Extract wallet address from GitHub or use a default
-            # In production, students would link their wallet
-            student_address = "0x0000000000000000000000000000000000000000"  # Placeholder
-            attestation_uid = blockchain_service.mint_task_attestation(
-                student_address=student_address,
-                task_id=task.id,
-                karma_earned=karma_delta,
-                github_link=submission.github_link
-            )
-            if attestation_uid:
-                submission.attestation_uid = attestation_uid
+
         
         # Update mentor score
         current_user.mentor_score += 1
@@ -269,7 +257,7 @@ async def review_task(
     elif request.action == "flag":
         # Flag task
         submission.status = "flagged"
-        submission.senior_feedback = request.feedback
+        submission.client_feedback = request.feedback
         submission.reviewed_at = datetime.utcnow()
         task.status = TaskStatus.FLAGGED
         
@@ -291,7 +279,7 @@ async def review_task(
     elif request.action == "revision":
         # Request revision
         submission.status = "revision"
-        submission.senior_feedback = request.feedback
+        submission.client_feedback = request.feedback
         task.status = TaskStatus.REVISION
     
     db.commit()

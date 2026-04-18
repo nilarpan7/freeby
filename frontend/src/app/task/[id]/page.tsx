@@ -17,7 +17,7 @@ export default function TaskDetailPage() {
     const [showSuccess, setShowSuccess] = useState(false);
 
     const task = getTaskById(id as string);
-    const senior = task ? getUserById(task.senior_id) : null;
+    const client = task ? getUserById(task.client_id) : null;
 
     useEffect(() => {
         if (!user) {
@@ -25,7 +25,7 @@ export default function TaskDetailPage() {
         }
     }, [user, router]);
 
-    if (!task || !senior) {
+    if (!task || !client) {
         return (
             <main className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
                 <div className="text-center">
@@ -89,9 +89,9 @@ export default function TaskDetailPage() {
                                 <h1 className="text-3xl md:text-4xl font-black mb-3">{task.title}</h1>
                                 <div className="flex items-center gap-3 text-sm text-gray-600 font-medium">
                                     <User size={16} />
-                                    <span className="font-bold text-black">{senior.name}</span>
+                                    <span className="font-bold text-black">{client.name}</span>
                                     <span>•</span>
-                                    <span>{senior.company}</span>
+                                    <span>{client.company}</span>
                                 </div>
                             </div>
                             <StatusPill status={task.status} />
@@ -181,7 +181,7 @@ export default function TaskDetailPage() {
                                     animate={{ opacity: 1, scale: 1 }}
                                     className="p-4 bg-green-100 border-2 border-green-600 text-green-800 font-bold text-center"
                                 >
-                                    ✅ Submission sent! The senior will review your work soon.
+                                    ✅ Submission sent! The client will review your work soon.
                                 </motion.div>
                             )}
                         </div>

@@ -41,7 +41,6 @@ backend/
 
 ### Prerequisites
 - Python 3.9+
-- Docker Desktop (for Arena feature)
 - PostgreSQL (optional, SQLite works for dev)
 
 ### Setup
@@ -61,10 +60,32 @@ pip install -r requirements.txt
 
 # Initialize database
 python -c "from database.database import init_db; init_db()"
+```
 
-# Run server
+### Running the Server
+
+**Option 1: Using the run script (Recommended)**
+```bash
+# From the backend directory
+python run.py
+```
+
+**Option 2: Using the batch file (Windows)**
+```bash
+# From the backend directory
+start.bat
+```
+
+**Option 3: Using uvicorn directly**
+```bash
+# From the backend directory
 uvicorn main:app --reload --port 8000
 ```
+
+The server will be available at:
+- API: `http://127.0.0.1:8000`
+- Swagger Docs: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
 
 ## 🔐 Environment Variables
 
@@ -143,11 +164,10 @@ GET    /api/sprints            # Get active sprints
 WS     /ws/arena/{bounty_id}   # Live coding arena
 ```
 
-## 🗄️ Database Models
-
-- **User** - Student/Senior profiles with karma tracking
-- **Task** - Micro-tasks with status and submissions
-- **TaskSubmission** - Student work submissions
+## 🗄️ The platform allows Clients to post micro-tasks that are completed by Students.
+Identity is built through a Karma score.
+- **Client**: Posts tasks, reviews work, earns referral bonuses.
+- **Student**: Completes tasks, earns Karma, unlocks referrals.
 - **KarmaEvent** - Reputation change log
 - **ReferralRequest** - Referral requests from students
 - **SprintSession** - Squad sprint collaboration sessions
@@ -188,23 +208,25 @@ token = liveblocks_service.generate_auth_token(
 )
 ```
 
-## 🐳 Docker Arena
+## 🎮 WebSocket Arena
 
-The Arena feature provisions ephemeral Docker containers for live coding:
+The Arena feature provides a live coding environment with mock container provisioning:
 
 ```python
-# Provision container
-container_id = provision_pod(image="python:3.9-slim")
+# Provision mock container
+container_id = mock_provision_pod()  # Returns mock_container_xxxxx
 
 # Execute code (via WebSocket)
 # ...
 
 # Generate proof-of-work receipt
-receipt = generate_pow_receipt(container_id, code_snippet)
+receipt = mock_generate_pow_receipt(container_id, code_snippet)
 
 # Cleanup
-cleanup_pod(container_id)
+mock_cleanup_pod(container_id)
 ```
+
+**Note:** The Arena currently uses mock functions for container provisioning. Docker integration is available in `docker_manager.py` if needed.
 
 ## 🧪 Testing
 
