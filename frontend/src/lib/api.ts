@@ -47,10 +47,13 @@ export const authApi = {
     
     // 2. Create profile
     if (authData.user) {
+      // Map frontend role to DB enum: student -> STUDENT, client -> SENIOR
+      const dbRole = data.role === 'client' ? 'SENIOR' : 'STUDENT';
+      
       const profileData: any = {
         id: authData.user.id,
         full_name: data.name,
-        role: data.role.toUpperCase() as any,
+        role: dbRole,
         domain: data.domain || null,
         skills: data.skills || [],
         karma_score: 0,
@@ -141,7 +144,8 @@ export const authApi = {
       id: profile.id,
       email: authData.user.email || '',
       name: profile.full_name,
-      role: (profile.role?.toLowerCase() || 'student') as 'student' | 'client',
+      // Map DB enum back: SENIOR -> client, STUDENT -> student
+      role: (profile.role === 'SENIOR' ? 'client' : 'student') as 'student' | 'client',
       domain: profile.domain,
       skills: profile.skills || [],
       karma_score: profile.karma_score || 0,

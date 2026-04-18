@@ -184,7 +184,7 @@ export default function TasksPage() {
 
                 {/* Stack */}
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {task.stack.slice(0, 3).map((tech, idx) => (
+                  {(task.stack || []).slice(0, 3).map((tech, idx) => (
                     <span
                       key={idx}
                       className="px-2 py-1 bg-cyan-100 border-2 border-black text-xs font-bold"
@@ -192,7 +192,7 @@ export default function TasksPage() {
                       {tech}
                     </span>
                   ))}
-                  {task.stack.length > 3 && (
+                  {(task.stack || []).length > 3 && (
                     <span className="px-2 py-1 bg-gray-100 border-2 border-black text-xs font-bold">
                       +{task.stack.length - 3}
                     </span>

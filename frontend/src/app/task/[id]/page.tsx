@@ -13,7 +13,9 @@ import {
   User, 
   Zap,
   DollarSign,
-  AlertTriangle
+  AlertTriangle,
+  Github,
+  Loader2
 } from 'lucide-react';
 import { HandDrawnFilters, Highlight, DifficultyBadge, SketchButton, SketchTextarea } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
@@ -30,12 +32,14 @@ interface Task {
   reward_amount: number;
   reward_karma: number;
   figma_url?: string;
-  design_files?: string[];
   client_id: string;
   client_name: string;
   client_company: string;
   status: string;
   claimed_by?: string;
+  assignee_id?: string;
+  submission_link?: string;
+  micro_tasks?: any[];
   created_at: string;
 }
 
@@ -46,8 +50,12 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [applicationText, setApplicationText] = useState('');
+  const [githubLink, setGithubLink] = useState('');
+  const [submissionText, setSubmissionText] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -80,11 +88,9 @@ export default function TaskDetailPage() {
       setApplying(true);
       setError('');
       await taskApi.applyForTask(task!.id, applicationText);
-      
-      // Refresh task data
       await loadTask();
       setApplicationText('');
-      alert('Application submitted successfully!');
+      setSuccess('You have claimed this task! Start working on it.');
     } catch (error: any) {
       setError(error.message || 'Failed to apply for task');
     } finally {
@@ -92,18 +98,44 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!githubLink.trim()) {
+      setError('Please provide your GitHub repo link');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError('');
+      await taskApi.submitTask(task!.id, {
+        github_link: githubLink.trim(),
+        submission_text: submissionText.trim(),
+      });
+      await loadTask();
+      setSuccess('Submission received! The client will review your work and the AI will analyze it. Task is pending approval.');
+    } catch (error: any) {
+      setError(error.message || 'Failed to submit task');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const canApply = () => {
     if (!user || !task) return false;
     return (
-      user.karma_score >= task.min_karma &&
+      user.karma_score >= (task.min_karma || 0) &&
       task.status === 'open' &&
       user.role === 'student'
     );
   };
 
+  const isMyTask = () => {
+    return user && task && task.assignee_id === user.id;
+  };
+
   const getKarmaDeficit = () => {
     if (!user || !task) return 0;
-    return Math.max(0, task.min_karma - user.karma_score);
+    return Math.max(0, (task.min_karma || 0) - user.karma_score);
   };
 
   if (isLoading || loading) {
@@ -118,7 +150,6 @@ export default function TaskDetailPage() {
     return (
       <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">❌</div>
           <h2 className="text-2xl font-black mb-2">Task Not Found</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <SketchButton onClick={() => router.push('/tasks')}>
@@ -152,7 +183,7 @@ export default function TaskDetailPage() {
         <div className="flex items-center gap-4">
           <div className="text-right">
             <div className="text-sm font-bold text-gray-500">Your Karma</div>
-            <div className="text-2xl font-black text-amber-600">⚡{user?.karma_score || 0}</div>
+            <div className="text-2xl font-black text-amber-600">K:{user?.karma_score || 0}</div>
           </div>
         </div>
       </nav>
@@ -193,7 +224,7 @@ export default function TaskDetailPage() {
                 <div className="mb-6">
                   <h3 className="font-black mb-2">Tech Stack</h3>
                   <div className="flex flex-wrap gap-2">
-                    {task.stack.map((tech, idx) => (
+                    {(task.stack || []).map((tech, idx) => (
                       <span
                         key={idx}
                         className="px-3 py-1 bg-cyan-100 border-2 border-black text-sm font-bold"
@@ -214,6 +245,25 @@ export default function TaskDetailPage() {
                   </div>
                 </div>
 
+                {/* Micro Tasks */}
+                {task.micro_tasks && task.micro_tasks.length > 0 && (
+                  <div className="mt-6 p-4 bg-amber-50 border-2 border-amber-600">
+                    <h3 className="font-black mb-3 text-amber-800">Micro-tasks Breakdown</h3>
+                    <ol className="space-y-2">
+                      {task.micro_tasks.map((mt: any, idx: number) => (
+                        <li key={idx} className="flex gap-3 text-sm">
+                          <span className="bg-black text-white px-2 py-0.5 text-xs font-bold min-w-[24px] text-center">
+                            {idx + 1}
+                          </span>
+                          <span className="font-medium">
+                            <span className="text-amber-700 font-bold">[{mt.type}]</span> {mt.title}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
                 {/* Design Files */}
                 {task.figma_url && (
                   <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-600">
@@ -231,7 +281,19 @@ export default function TaskDetailPage() {
                 )}
               </motion.div>
 
-              {/* Application Section */}
+              {/* Success Message */}
+              {success && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 bg-green-100 border-2 border-green-600 text-green-800 font-bold"
+                >
+                  <CheckCircle2 className="inline mr-2" size={18} />
+                  {success}
+                </motion.div>
+              )}
+
+              {/* Application Section — for OPEN tasks */}
               {user?.role === 'student' && task.status === 'open' && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -260,7 +322,7 @@ export default function TaskDetailPage() {
                   ) : (
                     <div>
                       <p className="text-gray-600 mb-4">
-                        Explain why you're the right person for this task. Mention your relevant experience and approach.
+                        Explain why you're the right person for this task.
                       </p>
                       
                       <SketchTextarea
@@ -284,19 +346,127 @@ export default function TaskDetailPage() {
                         >
                           {applying ? (
                             <>
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              Applying...
+                              <Loader2 className="animate-spin" size={16} />
+                              Claiming...
                             </>
                           ) : (
                             <>
                               <Send size={16} />
-                              Submit Application
+                              Claim Task
                             </>
                           )}
                         </SketchButton>
                       </div>
                     </div>
                   )}
+                </motion.div>
+              )}
+
+              {/* Submission Section — for CLAIMED tasks */}
+              {isMyTask() && task.status === 'claimed' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="bg-white border-4 border-black p-8"
+                  style={{ filter: "url(#rough-paper)" }}
+                >
+                  <h2 className="text-2xl font-black mb-4">
+                    <Highlight color="#bbf7d0">Submit Your Work</Highlight>
+                  </h2>
+                  <p className="text-gray-600 mb-4">
+                    Push your code to GitHub and share the repo link. The AI will analyze your submission
+                    and the client will review it via Telegram. The project stays <strong>pending</strong> until approved.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="group relative">
+                      <Github className="absolute left-4 top-3.5 text-gray-400 group-focus-within:text-black transition-colors z-10" size={18} />
+                      <input
+                        type="url"
+                        placeholder="https://github.com/yourusername/repo"
+                        value={githubLink}
+                        onChange={(e) => setGithubLink(e.target.value)}
+                        className="w-full bg-white border-2 border-black rounded-xl py-3 pl-12 pr-4 text-black font-medium focus:outline-none focus:shadow-[4px_4px_0px_rgba(0,0,0,1)] transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+
+                    <SketchTextarea
+                      placeholder="Describe what you built, any trade-offs, and how to run it..."
+                      value={submissionText}
+                      onChange={(e) => setSubmissionText(e.target.value)}
+                      rows={4}
+                    />
+
+                    {error && (
+                      <div className="p-3 bg-red-100 border-2 border-red-600 text-red-800 font-bold text-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    <SketchButton
+                      onClick={handleSubmit}
+                      disabled={submitting || !githubLink.trim()}
+                      className="flex items-center gap-2"
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <Send size={16} />
+                          Submit for Review
+                        </>
+                      )}
+                    </SketchButton>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Pending Review Status */}
+              {isMyTask() && task.status === 'in_review' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-amber-50 border-4 border-amber-600 p-8"
+                >
+                  <h2 className="text-2xl font-black mb-2 text-amber-800">Pending Review</h2>
+                  <p className="text-amber-700 font-medium">
+                    Your submission is being reviewed by the client and AI.
+                    The project remains <strong>pending</strong> until the client approves it via Telegram.
+                    Funds will be released after approval.
+                  </p>
+                  {task.submission_link && (
+                    <a
+                      href={task.submission_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 inline-flex items-center gap-2 text-amber-800 font-bold hover:underline"
+                    >
+                      <Github size={16} /> Your Submission
+                    </a>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Approved Status */}
+              {isMyTask() && task.status === 'approved' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-green-50 border-4 border-green-600 p-8"
+                >
+                  <h2 className="text-2xl font-black mb-2 text-green-800">
+                    <CheckCircle2 className="inline mr-2" size={24} />
+                    Approved!
+                  </h2>
+                  <p className="text-green-700 font-medium">
+                    Great work! The client approved your submission.
+                    You earned <strong>+{task.reward_karma || 10} karma</strong> and
+                    Rs.{task.reward_amount || 0} has been released.
+                  </p>
                 </motion.div>
               )}
             </div>
@@ -317,15 +487,19 @@ export default function TaskDetailPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-bold">Payment</span>
                     <span className="text-2xl font-black text-green-600">
-                      ₹{task.reward_amount}
+                      Rs.{task.reward_amount || 0}
                     </span>
                   </div>
                   
                   <div className="flex items-center justify-between">
                     <span className="font-bold">Karma Points</span>
                     <span className="text-2xl font-black text-amber-600">
-                      +{task.reward_karma}
+                      +{task.reward_karma || 10}
                     </span>
+                  </div>
+
+                  <div className="text-xs text-gray-500 mt-2 border-t border-gray-200 pt-2">
+                    Funds held in escrow until client approves via Telegram.
                   </div>
                 </div>
               </motion.div>
@@ -344,10 +518,10 @@ export default function TaskDetailPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-bold">Min Karma</span>
                     <div className={`flex items-center gap-1 font-black ${
-                      user && user.karma_score >= task.min_karma ? 'text-green-600' : 'text-red-600'
+                      user && user.karma_score >= (task.min_karma || 0) ? 'text-green-600' : 'text-red-600'
                     }`}>
                       <Zap size={16} />
-                      {task.min_karma}
+                      {task.min_karma || 0}
                     </div>
                   </div>
                   
@@ -359,9 +533,12 @@ export default function TaskDetailPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-bold">Status</span>
                     <span className={`px-2 py-1 border-2 border-black text-xs font-black uppercase ${
-                      task.status === 'open' ? 'bg-green-400' : 'bg-gray-400'
+                      task.status === 'open' ? 'bg-green-400' : 
+                      task.status === 'claimed' ? 'bg-blue-400' :
+                      task.status === 'in_review' ? 'bg-amber-400' :
+                      task.status === 'approved' ? 'bg-green-400' : 'bg-gray-400'
                     }`}>
-                      {task.status}
+                      {task.status === 'in_review' ? 'PENDING REVIEW' : task.status}
                     </span>
                   </div>
                 </div>
