@@ -60,10 +60,15 @@ If the user wants to update a task later, once you know what to update, output:
   "updates": { "budget": 6000 }
 }
 ```
+Keep your conversational responses helpful, consultative, concise, and professional. Ask one or two questions at a time to avoid overwhelming the user.
 
-Keep your conversational responses helpful, consultative, concise, and professional. Ask one or two questions at a time to avoid overwhelming the user."""
+CRITICAL INSTRUCTIONS:
+- Always use proper markdown code blocks (```json ... ```) when outputting actions.
+- Do NOT output 'the-uuid' if you don't know the actual Task ID. If you need a Task ID from the user to perform an update, explicitly ask them for it.
+- If the user asks to view, check, or verify their tasks, politely instruct them to use the "📋 View My Tasks" button from the Telegram menu instead of asking for an ID.
 
 CHAT_STATE = 1
+CONFIRM_TASK = 2
 
 # Review states
 REVIEW_SELECT, REVIEW_ACTION = range(10, 12)
@@ -76,15 +81,81 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_msg = (
         "Hey! Welcome to Kramic Task Creator!\n\n"
         "I'm an AI project manager and technical consultant. "
-        "What would you like to build today?"
+        "What would you like to build today? You can just type your idea, or use the menu below."
     )
     context.user_data['history'].append(AIMessage(content=welcome_msg))
-    await update.message.reply_text(welcome_msg)
+    
+    reply_markup = ReplyKeyboardMarkup([
+        ['➕ Create a New Task', '📋 View My Tasks'],
+        ['✅ Review Submissions']
+    ], resize_keyboard=True)
+    
+    await update.message.reply_text(welcome_msg, reply_markup=reply_markup)
     return CHAT_STATE
 
 async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle conversational AI via Langchain Bounded Prompts"""
+    """Handle conversational AI via Langchain Bounded Prompts OR Chat Replies"""
     user_text = update.message.text
+    
+    # Handle Menu Options
+    if user_text == '📋 View My Tasks':
+        from telegram.ext import ContextTypes # just in case
+        await my_tasks(update, context)
+        return CHAT_STATE
+    elif user_text == '✅ Review Submissions':
+        return await review_start(update, context)
+    elif user_text == '➕ Create a New Task':
+        await update.message.reply_text("Awesome! What do you want to build? Just tell me your idea.", reply_markup=ReplyKeyboardRemove())
+        return CHAT_STATE
+    
+    # Check if this is a reply to a chat message
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        reply_text = update.message.reply_to_message.text
+        if "💬 New Message from" in reply_text and "(ID: " in reply_text:
+            import re
+            task_id_match = re.search(r'\(ID: ([a-f0-9\-]+)\)', reply_text)
+            if task_id_match:
+                task_id = task_id_match.group(1)
+                
+                # Fetch the sender profile id
+                sb = get_supabase()
+                telegram_id = update.effective_user.id
+                profile_res = sb.table("profiles").select("id").eq("telegram_chat_id", telegram_id).execute()
+                
+                if profile_res.data:
+                    sender_id = profile_res.data[0]["id"]
+                    
+                    # Insert the message
+                    sb.table("task_messages").insert({
+                        "task_id": task_id,
+                        "sender_id": sender_id,
+                        "message_text": user_text,
+                        "is_system_message": False
+                    }).execute()
+                    
+                    # Notify the other party
+                    task_query = sb.table("solo_tasks").select("*, profiles:assignee_id(telegram_chat_id)").eq("id", task_id).execute()
+                    if task_query.data:
+                        task = task_query.data[0]
+                        sender_name = update.effective_user.full_name or "Someone"
+                        notify_chat_id = None
+                        
+                        if sender_id == task.get("assignee_id"):
+                            notify_chat_id = task.get("client_telegram_id")
+                        else:
+                            notify_chat_id = task.get("profiles", {}).get("telegram_chat_id") if task.get("profiles") else None
+                            
+                        if notify_chat_id:
+                            notification_text = f"💬 *New Message from {sender_name}*\nTask: *{task['title']}*\n\n{user_text}\n\n_Reply to this message to chat back. (ID: {task_id})_"
+                            # Can't easily import send_telegram_notification due to circular import, but we can use telegram API directly:
+                            try:
+                                await context.bot.send_message(chat_id=notify_chat_id, text=notification_text, parse_mode="Markdown")
+                            except Exception as e:
+                                print("Failed to forward:", e)
+                    
+                    # Add a small reaction or confirmation
+                    await update.message.reply_text("✅ _Message sent_", parse_mode="Markdown")
+                    return CHAT_STATE
     
     if 'history' not in context.user_data:
         context.user_data['history'] = []
@@ -105,35 +176,47 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ai_text = response.content
         history.append(AIMessage(content=ai_text))
         
-        # Check for JSON actions
-        if "```json" in ai_text:
-            import re
-            json_match = re.search(r'```json\n(.*?)\n```', ai_text, re.DOTALL)
-            if json_match:
+        # Try to parse JSON actions (with or without markdown backticks)
+        import re
+        action_data = None
+        chat_part = ai_text
+        
+        # Look for markdown JSON block first
+        json_match = re.search(r'```json\n(.*?)\n```', ai_text, re.DOTALL)
+        if json_match:
+            try:
                 action_data = json.loads(json_match.group(1))
-                action_type = action_data.get("action")
-                
-                if action_type == "create_task":
-                    chat_part = ai_text.split("```json")[0].strip()
-                    if chat_part:
-                        await update.message.reply_text(chat_part)
+                chat_part = ai_text.split("```json")[0].strip()
+            except:
+                pass
+        else:
+            # Fallback: look for any JSON-like object
+            json_match = re.search(r'(\{[\s\S]*"action"[\s\S]*\})', ai_text)
+            if json_match:
+                try:
+                    action_data = json.loads(json_match.group(1))
+                    chat_part = ai_text.replace(json_match.group(1), "").strip()
+                except:
+                    pass
+                    
+        if action_data:
+            action_type = action_data.get("action")
+            
+            if action_type == "create_task":
+                if chat_part:
+                    await update.message.reply_text(chat_part)
                         
                     await update.message.reply_text("⏳ Creating your task in the database...")
                     
                     try:
                         from telegram_agent import TelegramAgent
                         agent = TelegramAgent()
-                        sb = get_supabase()
                         
                         difficulty = action_data.get("difficulty", "medium").lower()
                         karma_reward = agent.calculate_karma_reward(difficulty, action_data.get("budget", 0))
                         
                         full_desc = action_data.get("description", "")
                         micro_tasks = action_data.get("micro_tasks", [])
-                        if micro_tasks:
-                            full_desc += "\n\n### Micro-Tasks Breakdown\n"
-                            for i, mt in enumerate(micro_tasks, 1):
-                                full_desc += f"{i}. [{mt.get('type')}] {mt.get('title')}\n"
                         
                         row = {
                             "title": action_data.get("title", "New Task"),
@@ -150,53 +233,107 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "micro_tasks": micro_tasks
                         }
                         
-                        res = sb.table("solo_tasks").insert(row).execute()
-                        if res.data:
-                            task_id = res.data[0].get("id")
-                            await update.message.reply_text(
-                                f"✅ *Task Created Successfully!*\n\n"
-                                f"*Task ID:* `{task_id}`\n"
-                                f"Students can now view and claim this task on the platform.\n"
-                                f"I am here if you need to create another task or have questions.",
-                                parse_mode="Markdown"
-                            )
-                        else:
-                            await update.message.reply_text("Failed to create task in DB.")
-                    except Exception as e:
-                        logger.error(f"Error executing create_task action: {e}", exc_info=True)
-                        await update.message.reply_text(f"Error creating task: {str(e)}")
+                        context.user_data['pending_task'] = row
                         
+                        # Generate a beautiful summary for confirmation
+                        summary = f"📋 *Task Summary*\n\n"
+                        summary += f"*{row['title']}*\n"
+                        summary += f"_{row['difficulty'].title()} Difficulty | {row['time_estimate_min']} Mins_\n\n"
+                        if micro_tasks:
+                            summary += f"*Micro-Tasks:*\n"
+                            for i, mt in enumerate(micro_tasks, 1):
+                                summary += f"{i}. [{mt.get('type')}] {mt.get('title')}\n"
+                        summary += f"\n*Budget:* ₹{row['reward_amount']}\n"
+                        summary += f"*Karma Required:* {row['min_karma']}\n\n"
+                        summary += f"Does this look good? The task is ready to be published."
+                        
+                        reply_markup = ReplyKeyboardMarkup([['✅ Confirm Task', '❌ Cancel']], resize_keyboard=True)
+                        await update.message.reply_text(summary, parse_mode="Markdown", reply_markup=reply_markup)
+                        
+                    except Exception as e:
+                        logger.error(f"Error preparing task creation: {e}", exc_info=True)
+                        await update.message.reply_text(f"Error preparing task: {str(e)}")
+                        
+                    return CONFIRM_TASK
+                    
+            elif action_type == "update_task":
+                if chat_part:
+                    await update.message.reply_text(chat_part)
+                
+                task_id = action_data.get("task_id")
+                if not task_id or task_id == "the-uuid":
+                    await update.message.reply_text("I need the exact Task ID to make updates. Please provide it.")
                     return CHAT_STATE
                     
-                elif action_type == "update_task":
-                    chat_part = ai_text.split("```json")[0].strip()
-                    if chat_part:
-                        await update.message.reply_text(chat_part)
+                await update.message.reply_text("⏳ Updating task in the database...")
+                try:
+                    sb = get_supabase()
+                    updates = action_data.get("updates", {})
                     
-                    await update.message.reply_text("⏳ Updating task in the database...")
-                    try:
-                        sb = get_supabase()
-                        updates = action_data.get("updates", {})
-                        task_id = action_data.get("task_id")
-                        
-                        res = sb.table("solo_tasks").update(updates).eq("id", task_id).execute()
-                        if res.data:
-                            await update.message.reply_text("✅ Task updated successfully.")
-                        else:
-                            await update.message.reply_text("Task not found or update failed.")
-                    except Exception as e:
-                        logger.error(f"Error updating task: {e}")
-                        await update.message.reply_text(f"Error updating task: {str(e)}")
-                        
-                    return CHAT_STATE
+                    res = sb.table("solo_tasks").update(updates).eq("id", task_id).execute()
+                    if res.data:
+                        await update.message.reply_text("✅ Task updated successfully.")
+                    else:
+                        await update.message.reply_text("Task not found or update failed. Please check the Task ID.")
+                except Exception as e:
+                    logger.error(f"Error updating task: {e}")
+                    await update.message.reply_text(f"Error updating task: {str(e)}")
+                    
+                return CHAT_STATE
 
-        await update.message.reply_text(ai_text)
+        # If no valid action was executed, just reply with the text
+        if chat_part:
+            await update.message.reply_text(chat_part)
         
     except Exception as e:
         logger.error(f"Error in chat: {e}", exc_info=True)
         await update.message.reply_text("Sorry, I'm having trouble processing that right now. Please try again.")
 
     return CHAT_STATE
+
+async def handle_confirm_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the user's response to the task confirmation prompt."""
+    text = update.message.text
+    
+    if text == '✅ Confirm Task':
+        row = context.user_data.get('pending_task')
+        if not row:
+            await update.message.reply_text("No pending task found. Let's start over.", reply_markup=ReplyKeyboardRemove())
+            return CHAT_STATE
+            
+        await update.message.reply_text("⏳ Publishing your task...", reply_markup=ReplyKeyboardRemove())
+        
+        try:
+            sb = get_supabase()
+            res = sb.table("solo_tasks").insert(row).execute()
+            if res.data:
+                task_id = res.data[0].get("id")
+                await update.message.reply_text(
+                    f"✅ *Task Created Successfully!*\n\n"
+                    f"*Task ID:* `{task_id}`\n"
+                    f"Students can now view and claim this task on the platform.\n"
+                    f"I am here if you need to create another task or have questions.",
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("Failed to create task in DB.")
+        except Exception as e:
+            logger.error(f"Error inserting confirmed task: {e}", exc_info=True)
+            await update.message.reply_text(f"Error creating task: {str(e)}")
+            
+        context.user_data.pop('pending_task', None)
+        return CHAT_STATE
+        
+    elif text == '❌ Cancel':
+        context.user_data.pop('pending_task', None)
+        await update.message.reply_text("Task creation cancelled. What would you like to change?", reply_markup=ReplyKeyboardRemove())
+        return CHAT_STATE
+        
+    else:
+        # User typed something else, maybe asking for modifications before confirming.
+        context.user_data.pop('pending_task', None)
+        await update.message.reply_text("I'll cancel the current draft and take your notes. What needs changing?", reply_markup=ReplyKeyboardRemove())
+        return CHAT_STATE
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation."""
@@ -471,6 +608,7 @@ def start_telegram_bot():
         entry_points=[CommandHandler('start', start), MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)],
         states={
             CHAT_STATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)],
+            CONFIRM_TASK: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_confirm_task)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )

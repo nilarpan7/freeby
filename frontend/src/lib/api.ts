@@ -189,6 +189,45 @@ export const authApi = {
 
   async logout() {
     await supabase.auth.signOut();
+  },
+
+  async getUserProfile(userId: string) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+      
+    if (error || !profile) return null;
+    
+    // Also fetch tasks count roughly
+    const { count: completedCount } = await supabase
+      .from('solo_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('assignee_id', userId)
+      .eq('status', 'COMPLETED');
+      
+    const { count: postedCount } = await supabase
+      .from('solo_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('senior_id', userId);
+
+    return {
+      id: profile.id,
+      name: profile.full_name,
+      role: (profile.role === 'SENIOR' ? 'client' : 'student') as 'student' | 'client',
+      domain: profile.domain,
+      skills: profile.skills || [],
+      karma_score: profile.karma_score || 0,
+      avatar_url: profile.avatar_url || '',
+      github_url: profile.github_url || '',
+      bio: profile.bio,
+      company: profile.company,
+      tasks_completed: completedCount || 0,
+      tasks_posted: postedCount || 0,
+      endorsements_received: 0,
+      created_at: profile.created_at,
+    };
   }
 };
 
@@ -281,6 +320,12 @@ export const taskApi = {
   async reviewTask(id: string, data: { action: string; feedback?: string }) {
     if (data.action === 'approve' || data.action === 'pass') {
       const { error } = await supabase.rpc('approve_solo_task', { p_task_id: id });
+      if (error) throw new ApiError(400, error.message);
+      return { success: true };
+    } else if (data.action === 'reject' || data.action === 'revision') {
+      const { error } = await supabase.from('solo_tasks').update({
+        status: 'REVISION_REQUESTED'
+      }).eq('id', id);
       if (error) throw new ApiError(400, error.message);
       return { success: true };
     }
@@ -469,4 +514,23 @@ export const referralApi = {
     });
     return resp.json();
   },
+};
+
+// Chat API
+export const chatApi = {
+  async getMessages(taskId: string) {
+    const resp = await fetch(`${API_URL}/chat/${taskId}`);
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to fetch messages');
+    return resp.json();
+  },
+
+  async sendMessage(taskId: string, senderId: string, messageText: string) {
+    const resp = await fetch(`${API_URL}/chat/${taskId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender_id: senderId, message_text: messageText }),
+    });
+    if (!resp.ok) throw new ApiError(resp.status, 'Failed to send message');
+    return resp.json();
+  }
 };

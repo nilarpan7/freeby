@@ -87,6 +87,8 @@ from routes.quest_routes import router as quest_router
 app.include_router(quest_router)
 from routes.referral_routes import router as referral_router
 app.include_router(referral_router)
+from routes.chat_routes import router as chat_router
+app.include_router(chat_router)
 
 @app.get("/")
 async def root():

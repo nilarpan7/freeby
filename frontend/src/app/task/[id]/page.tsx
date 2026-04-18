@@ -18,7 +18,8 @@ import {
   Loader2,
   UserPlus,
   RotateCcw,
-  XCircle
+  XCircle,
+  MessageSquare
 } from 'lucide-react';
 
 // Github icon doesn't exist in this lucide version — use a custom SVG
@@ -70,6 +71,7 @@ export default function TaskDetailPage() {
   const [referralUserId, setReferralUserId] = useState('');
   const [referringTask, setReferringTask] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -156,6 +158,23 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleReview = async (action: 'approve' | 'reject') => {
+    if (!task) return;
+    try {
+      setReviewing(true);
+      setError('');
+      await taskApi.reviewTask(task.id, { action });
+      await loadTask();
+      setSuccess(action === 'approve' ? 'Task approved and karma awarded!' : 'Revision requested sent.');
+      // Notify assignee via Telegram
+      referralApi.notifyTaskUpdate(task.id, action === 'approve' ? 'approved' : 'rejected').catch(() => {});
+    } catch (err: any) {
+      setError(err.message || 'Failed to review task');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   const canApply = () => {
     if (!user || !task) return false;
     return (
@@ -167,6 +186,10 @@ export default function TaskDetailPage() {
 
   const isMyTask = () => {
     return user && task && task.assignee_id === user.id;
+  };
+
+  const isClient = () => {
+    return user && task && task.client_id === user.id;
   };
 
   const getKarmaDeficit = () => {
@@ -224,7 +247,7 @@ export default function TaskDetailPage() {
         </div>
       </nav>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-8 py-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 py-8">
         {task && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Content */}
@@ -275,7 +298,7 @@ export default function TaskDetailPage() {
                 <div>
                   <h3 className="font-black mb-2">Description</h3>
                   <div className="prose prose-sm max-w-none">
-                    {task.description.split('\n').map((line, idx) => (
+                    {task.description.split('### Micro-Tasks Breakdown')[0].trim().split('\n').map((line: string, idx: number) => (
                       <p key={idx} className="mb-2">{line}</p>
                     ))}
                   </div>
@@ -461,7 +484,7 @@ export default function TaskDetailPage() {
                 </motion.div>
               )}
 
-              {/* Pending Review Status */}
+              {/* Pending Review Status - FOR DEVELOPER */}
               {isMyTask() && task.status === 'in_review' && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -470,8 +493,8 @@ export default function TaskDetailPage() {
                 >
                   <h2 className="text-2xl font-black mb-2 text-amber-800">Pending Review</h2>
                   <p className="text-amber-700 font-medium">
-                    Your submission is being reviewed by the client and AI.
-                    The project remains <strong>pending</strong> until the client approves it via Telegram.
+                    Your submission is being reviewed by the client.
+                    The project remains <strong>pending</strong> until the client approves it.
                     Funds will be released after approval.
                   </p>
                   {task.submission_link && (
@@ -484,6 +507,49 @@ export default function TaskDetailPage() {
                       <GithubIcon size={16} /> Your Submission
                     </a>
                   )}
+                </motion.div>
+              )}
+
+              {/* Review Actions - FOR CLIENT */}
+              {isClient() && task.status === 'in_review' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-blue-50 border-4 border-blue-600 p-8"
+                  style={{ filter: "url(#rough-paper)" }}
+                >
+                  <h2 className="text-2xl font-black mb-4 text-blue-900">Review Submission</h2>
+                  <p className="text-blue-800 font-medium mb-4">
+                    The developer has submitted their work. Please review it and either approve it or request a revision.
+                  </p>
+                  
+                  {task.submission_link && (
+                    <a
+                      href={task.submission_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-white border-2 border-black px-4 py-2 font-bold mb-6 hover:bg-gray-100 transition-colors"
+                    >
+                      <GithubIcon size={18} /> View Code / Repository
+                    </a>
+                  )}
+
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleReview('approve')}
+                      disabled={reviewing}
+                      className="flex-1 bg-green-500 text-white border-2 border-black py-3 font-black text-lg hover:bg-green-600 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                      <CheckCircle2 size={20} /> Approve & Complete
+                    </button>
+                    <button
+                      onClick={() => handleReview('reject')}
+                      disabled={reviewing}
+                      className="flex-1 bg-white text-red-600 border-2 border-black py-3 font-black text-lg hover:bg-red-50 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                      <AlertTriangle size={20} /> Request Revision
+                    </button>
+                  </div>
                 </motion.div>
               )}
 
@@ -685,7 +751,35 @@ export default function TaskDetailPage() {
                   </div>
                 </motion.div>
               )}
+
             </div>
+          </div>
+        )}
+
+        {/* Chat Interface Link (Visible if Client or Assignee) */}
+        {task && user && (isMyTask() || isClient()) && task.status !== 'open' && (
+          <div className="mt-8 w-full">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-black text-white p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[8px_8px_0px_#ffeb3b]"
+                style={{ filter: "url(#rough-paper)" }}
+            >
+                <div>
+                    <h3 className="text-2xl font-black mb-2 flex items-center gap-2">
+                        <MessageSquare size={24} /> Workspace Chat
+                    </h3>
+                    <p className="text-gray-300 font-medium">
+                        Coordinate with your {isClient() ? 'developer' : 'client'} in real-time, share files, or jump on a call.
+                    </p>
+                </div>
+                <button
+                    onClick={() => router.push(`/task/${task.id}/chat`)}
+                    className="flex-shrink-0 bg-amber-400 text-black border-4 border-black px-8 py-4 font-black text-lg shadow-[6px_6px_0px_#fff] hover:shadow-[8px_8px_0px_#fff] hover:-translate-y-1 transition-all"
+                >
+                    Open Chat Workspace →
+                </button>
+            </motion.div>
           </div>
         )}
       </div>

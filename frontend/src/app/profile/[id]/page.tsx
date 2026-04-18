@@ -1,19 +1,50 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, GitBranch, Mail, Code2, Zap, Award, TrendingUp, Calendar, ExternalLink } from 'lucide-react';
 import { HandDrawnFilters, Highlight, KarmaBadge, DifficultyBadge } from '@/components/HandDrawn';
-import { getUserById, getKarmaEvents, MOCK_TASKS } from '@/lib/mock-data';
+import { authApi, taskApi } from '@/lib/api';
 
 export default function ProfilePage() {
     const { id } = useParams();
     const router = useRouter();
     
-    const user = getUserById(id as string);
-    const karmaEvents = user ? getKarmaEvents(user.id) : [];
-    const userTasks = user ? MOCK_TASKS.filter(t => t.claimed_by === user.id || t.client_id === user.id) : [];
+    const [user, setUser] = useState<any>(null);
+    const [userTasks, setUserTasks] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const karmaEvents: any[] = []; // We can add real karma events fetch later if needed
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                setLoading(true);
+                const profile = await authApi.getUserProfile(id as string);
+                if (profile) {
+                    setUser(profile);
+                    // Fetch user tasks based on role
+                    const tasks = await taskApi.getTasks();
+                    const filteredTasks = tasks.filter(t => t.claimed_by === profile.id || t.client_id === profile.id);
+                    setUserTasks(filteredTasks);
+                }
+            } catch (error) {
+                console.error("Error fetching user:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (id) fetchUser();
+    }, [id]);
+
+    if (loading) {
+        return (
+            <main className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
+                <div className="text-2xl font-black">Loading...</div>
+            </main>
+        );
+    }
 
     if (!user) {
         return (
@@ -68,7 +99,7 @@ export default function ProfilePage() {
                                     className="h-32 w-32 rounded-full border-4 border-black bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-white text-4xl"
                                     style={{ filter: "url(#rough-paper)" }}
                                 >
-                                    {user.name.split(' ').map(n => n[0]).join('')}
+                                    {user.name?.split(' ').map((n: string) => n[0]).join('') || '?'}
                                 </div>
                             </div>
 
@@ -81,7 +112,7 @@ export default function ProfilePage() {
                                 </p>
 
                                 <div className="flex flex-wrap gap-3 mb-6">
-                                    {user.skills.map(skill => (
+                                    {user.skills?.map((skill: string) => (
                                         <span key={skill} className="px-3 py-1 text-sm font-bold bg-black text-white border-2 border-black" style={{ filter: "url(#rough-paper)" }}>
                                             {skill}
                                         </span>
@@ -101,10 +132,12 @@ export default function ProfilePage() {
                                             GitHub <ExternalLink size={12} />
                                         </a>
                                     )}
-                                    <div className="flex items-center gap-2 text-gray-600">
-                                        <Calendar size={16} />
-                                        <span className="font-medium">Joined {new Date(user.created_at).toLocaleDateString()}</span>
-                                    </div>
+                                    {user.created_at && (
+                                        <div className="flex items-center gap-2 text-gray-600">
+                                            <Calendar size={16} />
+                                            <span className="font-medium">Joined {new Date(user.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -306,7 +339,7 @@ export default function ProfilePage() {
                                                 <DifficultyBadge difficulty={task.difficulty} />
                                             </div>
                                             <div className="flex flex-wrap gap-1 mt-2">
-                                                {task.stack.slice(0, 3).map(s => (
+                                                {task.stack?.slice(0, 3).map((s: string) => (
                                                     <span key={s} className="text-xs font-bold bg-black text-white px-2 py-0.5">{s}</span>
                                                 ))}
                                             </div>

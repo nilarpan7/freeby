@@ -59,12 +59,7 @@ class TelegramAgent:
             for mt in bounty_spec.micro_tasks
         ]
 
-        # Build the description with micro-tasks appended for visibility
         full_description = bounty_spec.deliverable
-        if micro_tasks_list:
-            full_description += "\n\n### Micro-Tasks Breakdown\n"
-            for i, mt in enumerate(micro_tasks_list, 1):
-                full_description += f"{i}. [{mt['type']}] {mt['title']}\n"
 
         row = {
             "title": bounty_spec.title,

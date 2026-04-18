@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, CheckCircle2, XCircle, RotateCcw, Clock, Code2, Zap, Star, LogOut, Users, ArrowRight, MessageSquare, ChevronDown } from 'lucide-react';
+import { Plus, CheckCircle2, XCircle, RotateCcw, Clock, Code2, Zap, Star, LogOut, Users, ArrowRight, MessageSquare, ChevronDown, Wallet } from 'lucide-react';
 import { HandDrawnFilters, Highlight, SketchButton, SketchInput, SketchTextarea, TagInput, SketchSelect, DifficultyBadge, StatusPill, KarmaBadge } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
 import { getTasksByClient, getPendingReviews, MOCK_TASKS } from '@/lib/mock-data';
@@ -86,8 +86,14 @@ export default function ClientDashboard() {
                     <span className="ml-2 text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 border border-amber-300 rounded-full uppercase">CLIENT</span>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="hidden md:flex items-center gap-2 bg-white border-2 border-black px-3 py-1.5" style={{ filter: "url(#rough-paper)" }}>
-                        <Star size={14} className="text-amber-500" />
+                    {/* Wallet Balance */}
+                    <div className="hidden md:flex items-center gap-2 bg-green-100 border-2 border-black px-3 py-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer" style={{ filter: "url(#rough-paper)" }}>
+                        <Wallet size={16} className="text-green-700" />
+                        <span className="font-bold text-sm text-green-800">$1,250.00</span>
+                    </div>
+                    {/* Mentor Score */}
+                    <div className="hidden md:flex items-center gap-2 bg-amber-50 border-2 border-black px-3 py-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer" style={{ filter: "url(#rough-paper)" }}>
+                        <Star size={14} className="text-amber-500 fill-amber-500" />
                         <span className="font-bold text-sm">Mentor Score: {user.mentor_score || 0}</span>
                     </div>
                     <div

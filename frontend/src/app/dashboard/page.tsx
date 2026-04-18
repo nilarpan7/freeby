@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3, History } from 'lucide-react';
+import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3, History, Wallet } from 'lucide-react';
 import { HandDrawnFilters, Highlight, KarmaBadge, DifficultyBadge, ProgressRing, StatusPill } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
 import { taskApi } from '@/lib/api';
@@ -109,6 +109,11 @@ export default function StudentDashboard() {
                     </button>
                 </div>
                 <div className="flex items-center gap-4">
+                    {/* Wallet Balance */}
+                    <div className="hidden md:flex items-center gap-2 bg-green-100 border-2 border-black px-3 py-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all" style={{ filter: "url(#rough-paper)" }}>
+                        <Wallet size={16} className="text-green-700" />
+                        <span className="font-bold text-sm text-green-800">${((user.karma_score || 0) * 0.5).toFixed(2)}</span>
+                    </div>
                     <div className="cursor-pointer" onClick={() => setKarmaGraphOpen(true)} title="View Karma Work Graph">
                         <KarmaBadge score={user.karma_score} size="sm" />
                     </div>
