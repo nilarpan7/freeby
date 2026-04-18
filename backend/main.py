@@ -6,7 +6,7 @@ import json
 import hashlib
 import uuid
 
-from database.mongodb import connect_to_mongodb, close_mongodb_connection
+
 from config import FRONTEND_URL
 
 # Import routes
@@ -58,11 +58,8 @@ def mock_generate_pow_receipt(container_id, code_snippet, output=""):
 # Lifespan event handler for startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    await connect_to_mongodb()
+    # No database connection needed; Supabase client will be used in routes.
     yield
-    # Shutdown
-    await close_mongodb_connection()
 
 app = FastAPI(
     title="Kramic.sh API", 
@@ -90,7 +87,7 @@ async def root():
     return {
         "message": "Kramic.sh API",
         "version": "1.0.0",
-        "database": "MongoDB",
+        "database": "Supabase",
         "docs": "/docs"
     }
 

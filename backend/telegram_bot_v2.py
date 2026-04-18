@@ -1,5 +1,8 @@
 """
-Enhanced Telegram Bot with Conversation Flow for Task Creation
+Enhanced Telegram Bot with Conversation Flow for Task Creation (Supabase Edition)
+
+Collects project requirements step-by-step, sends them through LangChain for
+structured parsing, and inserts the result into the Supabase `solo_tasks` table.
 """
 import logging
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
@@ -14,233 +17,225 @@ from telegram.ext import (
 import os
 from dotenv import load_dotenv
 import asyncio
-import json
 
-from database.mongodb import connect_to_mongodb
 from telegram_agent import TelegramAgent
+
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Conversation states
-DESCRIPTION, FEATURES, DESIGN, BUDGET, MIN_KARMA, CONFIRM = range(6)
-
-# Temporary storage for conversation data
-user_data_store = {}
+DESCRIPTION, DESIGN, BUDGET, CONFIRM = range(4)
 
 # Agentic layer instance
 agent = TelegramAgent()
 
+
+# ──────────────────────────────────────────────
+# Step 0: /start
+# ──────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command - initiate task creation"""
-    user_id = update.effective_user.id
-    user_data_store[user_id] = {}
-    
+    """Start command — initiate task creation"""
+    # Clear any previous conversation data
+    context.user_data.clear()
+
     await update.message.reply_text(
         "👋 Welcome to Kramic Task Creator!\n\n"
-        "I'll help you create a task for students to work on.\n\n"
-        "Let's start: What do you need to build?\n"
-        "Example: 'I need a website for my shop' or 'I need a data analysis script'"
+        "I'll help you post a task for talented students to work on.\n\n"
+        "📝 *Step 1/3* — Describe your project.\n"
+        "Tell me everything: what you need built, key features, tech preferences, etc.\n\n"
+        "_Example: 'I need a React dashboard for my shop that shows sales, "
+        "inventory, and has a dark mode. Should use Tailwind and connect to a "
+        "Postgres database.'_",
+        parse_mode="Markdown"
     )
-    
+
     return DESCRIPTION
 
+
+# ──────────────────────────────────────────────
+# Step 1: Project Description → LangChain parse
+# ──────────────────────────────────────────────
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get task description"""
-    user_id = update.effective_user.id
+    """Get task description and parse with LangChain agent."""
     description = update.message.text
-    
-    # Use AI to parse the description via agent
-    await update.message.reply_text("🧠 Analyzing your request...")
-    
+
+    await update.message.reply_text("🧠 Analyzing your request with AI...")
+
     try:
         bounty_spec = agent.parse_description(description)
-        user_data_store[user_id]['bounty_spec'] = bounty_spec
-        user_data_store[user_id]['description'] = description
-        
+        context.user_data['bounty_spec'] = bounty_spec
+        context.user_data['description'] = description
+
+        # Format micro-tasks for display
+        micro_tasks_display = ""
+        if bounty_spec.micro_tasks:
+            micro_tasks_display = "\n🔨 *Micro-tasks:*\n"
+            for i, mt in enumerate(bounty_spec.micro_tasks, 1):
+                micro_tasks_display += f"   {i}. [{mt.type}] {mt.title}\n"
+
         await update.message.reply_text(
-            f"✅ Got it! I understood:\n\n"
-            f"📝 Title: {bounty_spec.title}\n"
-            f"💻 Stack: {', '.join(bounty_spec.stack)}\n"
-            f"⏱️ Estimated time: {bounty_spec.time_estimate_min} minutes\n"
-            f"📊 Difficulty: {bounty_spec.difficulty}\n\n"
-            f"Now, tell me more about the features you need.\n"
-            f"What specific functionality should it have?"
+            f"✅ Got it! Here's what I understood:\n\n"
+            f"📝 *Title:* {bounty_spec.title}\n"
+            f"💻 *Stack:* {', '.join(bounty_spec.stack)}\n"
+            f"⏱️ *Est. time:* {bounty_spec.time_estimate_min} mins\n"
+            f"📊 *Difficulty:* {bounty_spec.difficulty}\n"
+            f"⚡ *Suggested karma req:* {bounty_spec.min_karma_required}\n"
+            f"💰 *Suggested price:* ₹{bounty_spec.price_inr}"
+            f"{micro_tasks_display}\n\n"
+            f"🎨 *Step 2/3* — Do you have a design or Figma file?\n"
+            f"Send me the URL, or type *skip* if you don't have one.",
+            parse_mode="Markdown"
         )
-        
-        return FEATURES
+
+        return DESIGN
+
     except Exception as e:
-        logging.error(f"Error parsing description: {e}")
+        logger.error(f"Error parsing description: {e}")
         await update.message.reply_text(
-            "❌ Sorry, I couldn't understand that. Please describe your project more clearly."
+            "❌ Sorry, I couldn't understand that. Could you describe your project "
+            "in more detail? What do you need built and what tech should it use?"
         )
         return DESCRIPTION
 
-async def get_features(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get additional features"""
-    user_id = update.effective_user.id
-    features = update.message.text
-    
-    user_data_store[user_id]['features'] = features
-    
-    # Update description with features
-    bounty_spec = user_data_store[user_id]['bounty_spec']
-    bounty_spec.deliverable += f"\n\nAdditional features: {features}"
-    
-    reply_keyboard = [['Yes, I have a design', 'No design yet']]
-    
-    await update.message.reply_text(
-        "🎨 Do you have a design or Figma file ready?\n\n"
-        "If yes, please share the link in the next message.\n"
-        "If no, we'll proceed without it.",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-    )
-    
-    return DESIGN
 
+# ──────────────────────────────────────────────
+# Step 2: Design / Figma URL (or skip)
+# ──────────────────────────────────────────────
 async def get_design(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get design file or skip"""
-    user_id = update.effective_user.id
-    response = update.message.text
-    
-    if response.lower() in ['yes, i have a design', 'yes']:
-        await update.message.reply_text(
-            "Great! Please send me the Figma URL or design file link:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        user_data_store[user_id]['waiting_for_design_url'] = True
-        return DESIGN
-    elif user_data_store[user_id].get('waiting_for_design_url'):
-        # This is the design URL
-        design_url = update.message.text
-        user_data_store[user_id]['figma_url'] = design_url
-        user_data_store[user_id]['waiting_for_design_url'] = False
-        
-        await update.message.reply_text(
-            f"✅ Design link saved: {design_url}\n\n"
-            f"💰 What's your budget for this task?\n"
-            f"Please enter the amount in INR (e.g., 5000)"
-        )
-        return BUDGET
+    """Get Figma/design URL or skip."""
+    response = update.message.text.strip()
+
+    if response.lower() in ('skip', 'no', 'none', 'no design', 'nope', 'n/a', '-'):
+        context.user_data['figma_url'] = None
+        design_msg = "No design — no problem! "
     else:
-        # No design
-        user_data_store[user_id]['figma_url'] = None
-        
-        await update.message.reply_text(
-            "No problem! We'll proceed without a design.\n\n"
-            "💰 What's your budget for this task?\n"
-            "Please enter the amount in INR (e.g., 5000)",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return BUDGET
+        context.user_data['figma_url'] = response
+        design_msg = f"✅ Design link saved! "
 
+    bounty_spec = context.user_data['bounty_spec']
+
+    await update.message.reply_text(
+        f"{design_msg}\n\n"
+        f"💰 *Step 3/3* — What's your budget?\n\n"
+        f"The AI suggested *₹{bounty_spec.price_inr}* based on complexity.\n"
+        f"Enter the amount in INR (just the number, e.g. `5000`), or type "
+        f"*suggested* to use the AI's recommendation.",
+        parse_mode="Markdown"
+    )
+
+    return BUDGET
+
+
+# ──────────────────────────────────────────────
+# Step 3: Budget
+# ──────────────────────────────────────────────
 async def get_budget(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get budget amount"""
-    user_id = update.effective_user.id
-    budget_text = update.message.text
-    
-    try:
-        # Extract number from text
-        budget = int(''.join(filter(str.isdigit, budget_text)))
-        user_data_store[user_id]['budget'] = budget
-        
-        await update.message.reply_text(
-            f"✅ Budget set to ₹{budget}\n\n"
-            f"⚡ What minimum karma score should students have to apply?\n\n"
-            f"Karma represents a student's experience and reliability:\n"
-            f"• 0-20: Beginners\n"
-            f"• 20-50: Intermediate\n"
-            f"• 50-100: Experienced\n"
-            f"• 100+: Expert\n\n"
-            f"Enter a number (e.g., 0 for beginners, 50 for experienced):"
-        )
-        
-        return MIN_KARMA
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Please enter a valid number for the budget (e.g., 5000)"
-        )
-        return BUDGET
+    """Get budget amount."""
+    budget_text = update.message.text.strip()
+    bounty_spec = context.user_data['bounty_spec']
 
-async def get_min_karma(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get minimum karma requirement"""
-    user_id = update.effective_user.id
-    karma_text = update.message.text
-    
-    try:
-        min_karma = int(''.join(filter(str.isdigit, karma_text)))
-        user_data_store[user_id]['min_karma'] = min_karma
-        
-        # Show summary
-        data = user_data_store[user_id]
-        bounty_spec = data['bounty_spec']
-        
-        summary = (
-            "📋 Task Summary:\n\n"
-            f"📝 Title: {bounty_spec.title}\n"
-            f"💻 Stack: {', '.join(bounty_spec.stack)}\n"
-            f"📊 Difficulty: {bounty_spec.difficulty}\n"
-            f"⏱️ Time: {bounty_spec.time_estimate_min} minutes\n"
-            f"💰 Budget: ₹{data['budget']}\n"
-            f"⚡ Min Karma: {min_karma}\n"
-        )
-        
-        if data.get('figma_url'):
-            summary += f"🎨 Design: {data['figma_url']}\n"
-        
-        summary += f"\n📄 Description:\n{bounty_spec.deliverable}\n"
-        
-        reply_keyboard = [['✅ Create Task', '❌ Cancel']]
-        
-        await update.message.reply_text(
-            summary + "\n\nLooks good?",
-            reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-        )
-        
-        return CONFIRM
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Please enter a valid number for minimum karma (e.g., 0, 20, 50)"
-        )
-        return MIN_KARMA
+    if budget_text.lower() in ('suggested', 'suggest', 'auto', 'ai', 'default'):
+        budget = bounty_spec.price_inr
+    else:
+        try:
+            budget = int(''.join(filter(str.isdigit, budget_text)))
+            if budget <= 0:
+                raise ValueError("Budget must be positive")
+        except (ValueError, TypeError):
+            await update.message.reply_text(
+                "❌ Please enter a valid number for the budget (e.g. `5000`), "
+                "or type *suggested* to use the AI recommendation.",
+                parse_mode="Markdown"
+            )
+            return BUDGET
 
+    context.user_data['budget'] = budget
+    min_karma = bounty_spec.min_karma_required
+
+    # Build confirmation summary
+    micro_summary = ""
+    if bounty_spec.micro_tasks:
+        micro_summary = "\n🔨 *Micro-tasks:*\n"
+        for i, mt in enumerate(bounty_spec.micro_tasks, 1):
+            micro_summary += f"   {i}. [{mt.type}] {mt.title}\n"
+
+    design_line = ""
+    if context.user_data.get('figma_url'):
+        design_line = f"🎨 *Design:* {context.user_data['figma_url']}\n"
+
+    summary = (
+        "📋 *Task Summary — Please confirm:*\n\n"
+        f"📝 *Title:* {bounty_spec.title}\n"
+        f"💻 *Stack:* {', '.join(bounty_spec.stack)}\n"
+        f"📊 *Difficulty:* {bounty_spec.difficulty}\n"
+        f"⏱️ *Time:* {bounty_spec.time_estimate_min} mins\n"
+        f"💰 *Budget:* ₹{budget}\n"
+        f"⚡ *Min Karma:* {min_karma}\n"
+        f"{design_line}"
+        f"{micro_summary}\n"
+        f"📄 *Description:*\n{bounty_spec.deliverable[:500]}\n"
+    )
+
+    reply_keyboard = [['✅ Create Task', '❌ Cancel']]
+
+    await update.message.reply_text(
+        summary + "\n*Looks good?*",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
+        parse_mode="Markdown"
+    )
+
+    return CONFIRM
+
+
+# ──────────────────────────────────────────────
+# Step 4: Confirm & Insert into Supabase
+# ──────────────────────────────────────────────
 async def confirm_and_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm and create the task"""
-    user_id = update.effective_user.id
+    """Confirm and create the task in Supabase."""
     response = update.message.text
-    
+
     if response == '✅ Create Task':
         await update.message.reply_text(
-            "⏳ Creating your task...",
+            "⏳ Creating your task in Supabase...",
             reply_markup=ReplyKeyboardRemove()
         )
-        
-        try:
-            data = user_data_store[user_id]
-            bounty_spec = data['bounty_spec']
 
-            # Create task via agentic layer (await async Beanie operations)
-            task = await agent.create_task_from_conversation(user_id, data, client_name=update.effective_user.full_name or update.effective_user.username)
+        try:
+            bounty_spec = context.user_data['bounty_spec']
+            budget = context.user_data['budget']
+
+            inserted = await agent.create_task_in_supabase(
+                bounty_spec=bounty_spec,
+                budget=budget,
+                min_karma=bounty_spec.min_karma_required,
+                figma_url=context.user_data.get('figma_url'),
+                client_name=update.effective_user.full_name or update.effective_user.username,
+                client_telegram_id=update.effective_user.id,
+            )
+
+            task_id = inserted.get('id', 'N/A')
+            karma_reward = inserted.get('karma_reward', '?')
 
             await update.message.reply_text(
-                f"✅ Task Created Successfully!\n\n"
-                f"🎯 Task ID: {task.id}\n"
-                f"📝 Title: {task.title}\n"
-                f"💰 Budget: ₹{task.reward_amount}\n"
-                f"⚡ Min Karma: {task.min_karma}\n"
-                f"🏆 Karma Reward: {task.reward_karma} points\n\n"
+                f"✅ *Task Created Successfully!*\n\n"
+                f"🎯 *Task ID:* `{task_id}`\n"
+                f"📝 *Title:* {bounty_spec.title}\n"
+                f"💰 *Budget:* ₹{budget}\n"
+                f"⚡ *Min Karma:* {bounty_spec.min_karma_required}\n"
+                f"🏆 *Karma Reward:* {karma_reward} points\n\n"
                 f"Students can now see and apply for your task on the website!\n\n"
-                f"Use /start to create another task."
+                f"Use /start to create another task.",
+                parse_mode="Markdown"
             )
-            
-            # Clear user data
-            del user_data_store[user_id]
-            
+
+            context.user_data.clear()
             return ConversationHandler.END
-            
+
         except Exception as e:
-            logging.error(f"Error creating task: {e}")
+            logger.error(f"Error creating task: {e}", exc_info=True)
             await update.message.reply_text(
                 f"❌ Error creating task: {str(e)}\n\n"
                 f"Please try again with /start"
@@ -252,99 +247,93 @@ async def confirm_and_create(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "Use /start to create a new task.",
             reply_markup=ReplyKeyboardRemove()
         )
-        del user_data_store[user_id]
+        context.user_data.clear()
         return ConversationHandler.END
 
+
+# ──────────────────────────────────────────────
+# Utility handlers
+# ──────────────────────────────────────────────
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation"""
-    user_id = update.effective_user.id
-    if user_id in user_data_store:
-        del user_data_store[user_id]
-    
+    """Cancel the conversation."""
+    context.user_data.clear()
     await update.message.reply_text(
-        "❌ Task creation cancelled.\n\n"
-        "Use /start to create a new task.",
+        "❌ Task creation cancelled.\n\nUse /start to begin again.",
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
 
-async def help_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fallback for plain text messages outside the conversation."""
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help info."""
     await update.message.reply_text(
-        "Hi — to create a task please use the /start command."
+        "🤖 *Kramic Task Bot*\n\n"
+        "I help you post freelance tasks for students.\n\n"
+        "*Commands:*\n"
+        "/start — Create a new task\n"
+        "/cancel — Cancel current task creation\n"
+        "/help — Show this message\n\n"
+        "*How it works:*\n"
+        "1️⃣ Describe your project\n"
+        "2️⃣ Share a design link (optional)\n"
+        "3️⃣ Set your budget\n"
+        "4️⃣ Confirm & publish!\n\n"
+        "The AI will automatically analyze complexity, suggest pricing, "
+        "and break your project into micro-tasks.",
+        parse_mode="Markdown"
     )
 
 
-async def log_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Print every incoming message/update to the console for debugging."""
-    user = update.effective_user
-    try:
-        text = update.message.text if update.message and update.message.text is not None else "<non-text>"
-    except Exception:
-        text = str(update)
-
-    uname = getattr(user, 'username', None)
-    fullname = getattr(user, 'full_name', None) if user else None
-    print(f"[TELEGRAM] from={getattr(user,'id',None)} username={uname} name={fullname} text={text}")
-    logging.info(f"Telegram update: user={getattr(user,'id',None)} text={text}")
-
-def calculate_karma_reward(difficulty: str, budget: float) -> int:
-    """Calculate karma reward based on difficulty and budget"""
-    base_karma = {
-        'easy': 5,
-        'medium': 10,
-        'hard': 20
-    }
-    
-    karma = base_karma.get(difficulty.lower(), 10)
-    
-    # Bonus karma for higher budgets
-    if budget > 10000:
-        karma += 10
-    elif budget > 5000:
-        karma += 5
-    
-    return karma
+async def fallback_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reply to messages outside the conversation flow."""
+    await update.message.reply_text(
+        "👋 Hi! Use /start to create a task, or /help for more info."
+    )
 
 
-async def start_telegram_bot():
-    """Start the Telegram bot with conversation handler (async version)"""
+# ──────────────────────────────────────────────
+# Bot entry point
+# ──────────────────────────────────────────────
+def start_telegram_bot():
+    """Start the Telegram bot with conversation handler."""
     if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "your_bot_token_here":
-        print("TELEGRAM_BOT_TOKEN not configured. Skipping bot.")
+        print("[WARN] TELEGRAM_BOT_TOKEN not configured. Skipping bot.")
         return
-    # Ensure MongoDB connection for Beanie models is initialized
+
+    # Verify Supabase connection early
     try:
-        await connect_to_mongodb()
+        from database.supabase_client import get_supabase
+        get_supabase()
     except Exception as e:
-        print(f"Failed to connect to MongoDB before starting bot: {e}")
+        print(f"[ERROR] Supabase connection failed: {e}")
+        print("   Check SUPABASE_URL and SUPABASE_KEY in your .env file.")
         return
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Conversation handler
+    # Conversation handler: describe -> design -> budget -> confirm
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
             DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
-            FEATURES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_features)],
             DESIGN: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_design)],
             BUDGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget)],
-            MIN_KARMA: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_min_karma)],
             CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_and_create)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
-    # Logging handler: print every update before other handlers
-    app.add_handler(MessageHandler(filters.ALL, log_message), group=0)
-
+    # Register handlers (conversation first, then fallbacks)
     app.add_handler(conv_handler)
-    # Fallback: reply to plain texts with a short help message
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_fallback))
+    app.add_handler(CommandHandler('help', help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_text))
 
-    print("🤖 Starting Enhanced Telegram Bot with Conversation Flow...")
-    print("📱 Send /start to begin creating a task")
-    await app.run_polling()
+    print("[BOT] Kramic Telegram Bot started (Supabase mode)")
+    print("[BOT] Send /start to begin creating a task")
+    # run_polling() manages its own event loop — do NOT use asyncio.run()
+    app.run_polling()
+
 
 if __name__ == "__main__":
-    asyncio.run(start_telegram_bot())
+    start_telegram_bot()
+

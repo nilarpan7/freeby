@@ -25,3 +25,5 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # CORS
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")

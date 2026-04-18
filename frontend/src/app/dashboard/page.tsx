@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Clock, Code2, Filter, Search, Zap, Trophy, LogOut, Star, BarChart3 } from 'lucide-react';
 import { HandDrawnFilters, Highlight, KarmaBadge, DifficultyBadge, ProgressRing, StatusPill } from '@/components/HandDrawn';
 import { useAuth } from '@/lib/auth-context';
-import { MOCK_TASKS, getKarmaEvents } from '@/lib/mock-data';
+import { taskApi } from '@/lib/api';
 import type { Task, Difficulty } from '@/lib/types';
 
 export default function StudentDashboard() {
@@ -15,6 +15,9 @@ export default function StudentDashboard() {
     const [searchQuery, setSearchQuery] = useState('');
     const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | 'all'>('all');
     const [domainFilter, setDomainFilter] = useState<string>('all');
+    const [allTasks, setAllTasks] = useState<any[]>([]);
+    const [myTasks, setMyTasks] = useState<any[]>([]);
+    const [tasksLoading, setTasksLoading] = useState(true);
 
     useEffect(() => {
         if (!user) {
@@ -24,25 +27,43 @@ export default function StudentDashboard() {
         }
     }, [user, router]);
 
+    useEffect(() => {
+        if (user) {
+            loadTasks();
+        }
+    }, [user]);
+
+    const loadTasks = async () => {
+        try {
+            setTasksLoading(true);
+            const [tasks, claimed] = await Promise.all([
+                taskApi.getTasks(),
+                taskApi.getMyTasks(),
+            ]);
+            setAllTasks(tasks);
+            setMyTasks(claimed);
+        } catch (err) {
+            console.error('Error loading tasks:', err);
+        } finally {
+            setTasksLoading(false);
+        }
+    };
+
     if (!user) return null;
 
-    const karmaEvents = getKarmaEvents(user.id);
     const REFERRAL_THRESHOLD = 500;
 
     // Filter tasks
-    const openTasks = MOCK_TASKS.filter(t => t.status === 'open');
-    const filteredTasks = openTasks.filter(t => {
+    const openTasks = allTasks.filter((t: any) => t.status === 'open');
+    const filteredTasks = openTasks.filter((t: any) => {
         const matchesSearch = !searchQuery || 
             t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            t.stack.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+            (t.stack || []).some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesDifficulty = difficultyFilter === 'all' || t.difficulty === difficultyFilter;
         const matchesDomain = domainFilter === 'all' || 
-            t.stack.some(s => s.toLowerCase().includes(domainFilter.toLowerCase()));
+            (t.stack || []).some((s: string) => s.toLowerCase().includes(domainFilter.toLowerCase()));
         return matchesSearch && matchesDifficulty && matchesDomain;
     });
-
-    // My claimed/submitted tasks
-    const myTasks = MOCK_TASKS.filter(t => t.claimed_by === user.id);
 
     const handleLogout = () => {
         logout();
@@ -115,11 +136,11 @@ export default function StudentDashboard() {
 
                             <div className="flex flex-wrap gap-6">
                                 <div className="text-center">
-                                    <div className="text-3xl font-black">{user.tasks_completed}</div>
+                                    <div className="text-3xl font-black">{user.tasks_completed || 0}</div>
                                     <div className="text-xs font-bold text-gray-500 uppercase">Tasks Done</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="text-3xl font-black">{user.endorsements_received}</div>
+                                    <div className="text-3xl font-black">{(user as any).endorsements_received || 0}</div>
                                     <div className="text-xs font-bold text-gray-500 uppercase">Endorsements</div>
                                 </div>
                                 <div className="text-center">
@@ -316,34 +337,7 @@ export default function StudentDashboard() {
                 </div>
 
                 {/* ── RECENT KARMA ── */}
-                {karmaEvents.length > 0 && (
-                    <div className="mt-16 mb-8">
-                        <h2 className="text-2xl font-black mb-6">Recent <Highlight color="#ddd6fe">Karma</Highlight> Activity</h2>
-                        <div className="space-y-3">
-                            {karmaEvents.slice(0, 5).map((event, i) => (
-                                <motion.div
-                                    key={event.id}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="flex items-center justify-between p-4 border-2 border-black bg-white"
-                                    style={{ filter: "url(#rough-paper)" }}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className={`text-lg font-black ${event.karma_delta > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {event.karma_delta > 0 ? '+' : ''}{event.karma_delta}
-                                        </span>
-                                        <div>
-                                            <p className="font-bold text-sm">{event.description}</p>
-                                            {event.task_title && <p className="text-xs text-gray-500">{event.task_title}</p>}
-                                        </div>
-                                    </div>
-                                    <span className="text-xs text-gray-400 font-medium">{new Date(event.created_at).toLocaleDateString()}</span>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {/* Karma activity section — will show when attestations exist */}
             </div>
         </main>
     );

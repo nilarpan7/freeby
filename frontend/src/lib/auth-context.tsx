@@ -20,6 +20,9 @@ interface RegisterData {
   password: string;
   name: string;
   role: 'student' | 'client';
+  domain?: string;
+  skills?: string[];
+  company?: string;
 }
 
 interface GoogleLoginData {
@@ -51,33 +54,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token and fetch user
-    const token = localStorage.getItem('kramic_token');
-    if (token) {
-      if (token === 'mock_demo_token') {
-        const mockUser = localStorage.getItem('kramic_user');
-        if (mockUser) {
-          setUser(JSON.parse(mockUser));
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      authApi.getMe()
-        .then((userData) => {
-          setUser(userData);
-        })
-        .catch(() => {
-          // Token invalid, clear it
-          localStorage.removeItem('kramic_token');
-          localStorage.removeItem('kramic_user');
-        })
-        .finally(() => {
+    // Check for existing session
+    const checkSession = async () => {
+      try {
+        // First check for mock session
+        const token = localStorage.getItem('kramic_token');
+        if (token === 'mock_demo_token') {
+          const mockUser = localStorage.getItem('kramic_user');
+          if (mockUser) {
+            setUser(JSON.parse(mockUser));
+          }
           setIsLoading(false);
-        });
-    } else {
-      setIsLoading(false);
-    }
+          return;
+        }
+
+        // Check Supabase session
+        const userData = await authApi.getMe();
+        if (userData) {
+          setUser(userData as User);
+        }
+      } catch {
+        // No valid session
+        localStorage.removeItem('kramic_token');
+        localStorage.removeItem('kramic_user');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
   }, []);
 
   const login = async (email: string, password: string) => {

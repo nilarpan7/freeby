@@ -7,34 +7,69 @@ export class ApiError extends Error {
   }
 }
 
+// Helper to map Supabase Task to Frontend Task
+const mapTask = (t: any) => {
+  if (!t) return null;
+  return {
+    ...t,
+    status: t.status?.toLowerCase() || 'open',
+    reward_karma: t.karma_reward,
+    client_name: t.client_name || t.profiles?.full_name || 'Task Creator',
+    client_company: t.profiles?.company || '',
+    client_id: t.senior_id || t.client_telegram_id,
+    micro_tasks: t.micro_tasks || [],
+  };
+};
+
 // Auth API
 export const authApi = {
-  async register(data: { email: string; password: string; name: string; role: string }) {
+  async register(data: { 
+    email: string; 
+    password: string; 
+    name: string; 
+    role: string;
+    domain?: string;
+    skills?: string[];
+    company?: string;
+  }) {
+    // 1. Sign up with Supabase Auth
     const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+      options: {
+        data: {
+          full_name: data.name,
+          role: data.role,
+        }
+      }
     });
     if (error) throw new ApiError(error.status || 400, error.message);
     
+    // 2. Create profile
     if (authData.user) {
-      const { error: profileError } = await supabase.from('profiles').insert([
-        {
-          id: authData.user.id,
-          full_name: data.name,
-          role: data.role.toUpperCase() as any, // 'STUDENT' or 'SENIOR'
-        }
-      ]);
-      if (profileError) throw new ApiError(400, profileError.message);
+      const profileData: any = {
+        id: authData.user.id,
+        full_name: data.name,
+        role: data.role.toUpperCase() as any,
+        domain: data.domain || null,
+        skills: data.skills || [],
+        karma_score: 0,
+        profile_completed: false, // Will complete in setup page
+      };
+      
+      if (data.company) {
+        profileData.company = data.company;
+      }
+      
+      const { error: profileError } = await supabase.from('profiles').insert([profileData]);
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Don't throw — the user is created, profile can be retried
+      }
     }
     
-    // Attempt to get the combined user object
-    try {
-      const user = await this.getMe();
-      return { access_token: authData.session?.access_token, user };
-    } catch (e) {
-      // In case getMe fails immediately after sign up
-      return { access_token: authData.session?.access_token, user: authData.user };
-    }
+    const user = await this.getMe();
+    return { access_token: authData.session?.access_token || 'sb-token', user };
   },
   
   async login(email: string, password: string) {
@@ -53,7 +88,7 @@ export const authApi = {
     if (user?.id) {
       await supabase.from('profiles').update({ role: data.role.toUpperCase() }).eq('id', user.id);
     }
-    return { access_token: 'google-oauth', user };
+    return { access_token: 'google-oauth', user: await this.getMe() };
   },
 
   async setupProfile(data: { domain: string; skills: string[]; bio?: string; github_url?: string; avatar_url?: string; company?: string }) {
@@ -63,96 +98,154 @@ export const authApi = {
     const { error } = await supabase.from('profiles').update({
       domain: data.domain,
       skills: data.skills,
+      bio: data.bio,
+      github_url: data.github_url,
+      avatar_url: data.avatar_url,
+      company: data.company,
+      profile_completed: true
     }).eq('id', user.id);
     if (error) throw new ApiError(400, error.message);
     
-    const updatedUser = await this.getMe();
-    return { user: updatedUser };
+    return { user: await this.getMe() };
   },
   
   async getMe() {
     const { data: authData, error } = await supabase.auth.getUser();
-    if (error || !authData.user) throw new ApiError(401, 'Unauthorized');
+    if (error || !authData.user) return null;
     
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', authData.user.id).single();
-    if (profileError) throw new ApiError(404, 'Profile not found');
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
+    
+    if (profileError || !profile) {
+      // Return minimal user if profile doesn't exist yet
+      return {
+        id: authData.user.id,
+        email: authData.user.email || '',
+        name: authData.user.user_metadata?.full_name || 'User',
+        role: (authData.user.user_metadata?.role || 'student') as 'student' | 'client',
+        skills: [],
+        karma_score: 0,
+        avatar_url: '',
+        github_url: '',
+        profile_completed: false,
+        tasks_completed: 0,
+        tasks_posted: 0,
+        created_at: authData.user.created_at,
+      };
+    }
     
     return {
-      ...authData.user,
-      ...profile,
+      id: profile.id,
+      email: authData.user.email || '',
       name: profile.full_name,
+      role: (profile.role?.toLowerCase() || 'student') as 'student' | 'client',
+      domain: profile.domain,
+      skills: profile.skills || [],
       karma_score: profile.karma_score || 0,
+      avatar_url: profile.avatar_url || '',
+      github_url: profile.github_url || '',
+      bio: profile.bio,
+      company: profile.company,
+      profile_completed: profile.profile_completed || false,
+      tasks_completed: 0, // Could query from solo_tasks
+      tasks_posted: 0,
+      endorsements_received: 0,
+      created_at: profile.created_at,
     };
   },
 
   async logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new ApiError(400, error.message);
+    await supabase.auth.signOut();
   }
 };
 
 // Task API
 export const taskApi = {
   async getTasks(filters?: { status?: string; difficulty?: string; domain?: string }) {
-    let query = supabase.from('solo_tasks').select(`
-      *,
-      profiles:senior_id (full_name, domain)
-    `);
-    if (filters?.status) query = query.eq('status', filters.status.toUpperCase());
+    let query = supabase.from('solo_tasks').select('*');
+    
+    if (filters?.status) {
+      query = query.eq('status', filters.status.toUpperCase());
+    }
     
     const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw new ApiError(400, error.message);
-    return data;
+    
+    return (data || []).map(mapTask);
   },
   
   async getTask(id: string) {
-    const { data, error } = await supabase.from('solo_tasks').select(`
-      *,
-      profiles:senior_id (full_name)
-    `).eq('id', id).single();
+    const { data, error } = await supabase
+      .from('solo_tasks')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
     if (error) throw new ApiError(404, error.message);
-    return data;
+    return mapTask(data);
   },
   
-  async createTask(data: { title: string; description: string; karma_reward?: number; }) {
+  async createTask(data: any) {
     const user = await authApi.getMe();
-    if (!user.id) throw new ApiError(401, 'Unauthorized');
+    if (!user?.id) throw new ApiError(401, 'Unauthorized');
 
     const { data: taskData, error } = await supabase.from('solo_tasks').insert([
       {
         senior_id: user.id,
         title: data.title,
         description: data.description,
-        karma_reward: data.karma_reward || 10,
+        karma_reward: data.reward_karma || 10,
+        stack: data.stack || [],
+        difficulty: (data.difficulty?.toLowerCase() || 'easy') as any,
+        time_estimate_min: data.time_estimate_min || 60,
+        min_karma: data.min_karma || 0,
+        reward_amount: data.reward_amount || 0,
         status: 'OPEN'
       }
     ]).select().single();
+    
     if (error) throw new ApiError(400, error.message);
-    return taskData;
+    return mapTask(taskData);
   },
   
   async claimTask(id: string) {
     const user = await authApi.getMe();
-    if (!user.id) throw new ApiError(401, 'Unauthorized');
+    if (!user?.id) throw new ApiError(401, 'Unauthorized');
+
+    // Check karma requirement
+    const task = await this.getTask(id);
+    if (!task) throw new ApiError(404, 'Task not found');
+    if (user.karma_score < (task.min_karma || 0)) {
+      throw new ApiError(403, `You need ${task.min_karma - user.karma_score} more karma to claim this task`);
+    }
 
     const { data, error } = await supabase.from('solo_tasks').update({
       assignee_id: user.id,
       status: 'CLAIMED'
-    }).eq('id', id).select().single();
+    }).eq('id', id).eq('status', 'OPEN').select().single();
+    
     if (error) throw new ApiError(400, error.message);
-    return data;
+    return mapTask(data);
+  },
+
+  async applyForTask(id: string, applicationText: string) {
+    return this.claimTask(id);
   },
   
   async submitTask(id: string, data: { github_link: string; submission_text: string }) {
     const user = await authApi.getMe();
-    if (!user.id) throw new ApiError(401, 'Unauthorized');
+    if (!user?.id) throw new ApiError(401, 'Unauthorized');
 
     const { data: updatedTask, error } = await supabase.from('solo_tasks').update({
       submission_link: data.github_link,
       status: 'IN_REVIEW'
     }).eq('id', id).eq('assignee_id', user.id).select().single();
+    
     if (error) throw new ApiError(400, error.message);
-    return updatedTask;
+    return mapTask(updatedTask);
   },
   
   async reviewTask(id: string, data: { action: string; feedback?: string }) {
@@ -163,6 +256,20 @@ export const taskApi = {
     }
     return { success: false };
   },
+
+  async getMyTasks() {
+    const user = await authApi.getMe();
+    if (!user?.id) return [];
+    
+    const { data, error } = await supabase
+      .from('solo_tasks')
+      .select('*')
+      .eq('assignee_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) return [];
+    return (data || []).map(mapTask);
+  },
 };
 
 // User API
@@ -170,7 +277,10 @@ export const userApi = {
   async getUser(userId: string) {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (error) throw new ApiError(404, error.message);
-    return data;
+    return {
+      ...data,
+      name: data.full_name
+    };
   },
   
   async getKarmaEvents(userId: string) {
@@ -178,20 +288,30 @@ export const userApi = {
       *,
       solo_tasks:task_id (title)
     `).eq('student_id', userId).order('created_at', { ascending: false });
+    
     if (error) throw new ApiError(400, error.message);
-    return data;
+    return (data || []).map(e => ({
+      ...e,
+      task_title: e.solo_tasks?.title,
+      karma_delta: 10 // Mock delta for solo tasks
+    }));
   },
   
   async getLeaderboard(limit: number = 50) {
     const { data, error } = await supabase.from('profiles').select('*').order('karma_score', { ascending: false }).limit(limit);
     if (error) throw new ApiError(400, error.message);
-    return data;
+    return (data || []).map((u, i) => ({
+      rank: i + 1,
+      user: { ...u, name: u.full_name },
+      trend: 'stable',
+      tasks_this_week: 2
+    }));
   },
 };
 
 // Sprint API
 export const sprintApi = {
-  async createSprint(data: { title: string; description: string; max_participants?: number; repo_link?: string }) {
+  async createSprint(data: any) {
     const { data: sprint, error } = await supabase.from('squad_sprints').insert([
       {
         title: data.title,
@@ -206,7 +326,7 @@ export const sprintApi = {
   
   async joinSprint(sprintId: string) {
     const user = await authApi.getMe();
-    if (!user.id) throw new ApiError(401, 'Unauthorized');
+    if (!user?.id) throw new ApiError(401, 'Unauthorized');
 
     const { error } = await supabase.from('squad_members').insert([
       { sprint_id: sprintId, student_id: user.id }

@@ -64,7 +64,7 @@ export default function TasksPage() {
       return (
         task.title.toLowerCase().includes(query) ||
         task.description.toLowerCase().includes(query) ||
-        task.stack.some(s => s.toLowerCase().includes(query))
+        (task.stack || []).some(s => s.toLowerCase().includes(query))
       );
     }
     
