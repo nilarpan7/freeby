@@ -83,8 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authApi.login(email, password);
-      localStorage.setItem('kramic_token', response.access_token);
-      setUser(response.user);
+      if (response.access_token) {
+        localStorage.setItem('kramic_token', response.access_token);
+      }
+      setUser(response.user as User);
     } catch (error) {
       if (error instanceof ApiError) {
         throw new Error(error.message);
@@ -96,8 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: RegisterData) => {
     try {
       const response = await authApi.register(data);
-      localStorage.setItem('kramic_token', response.access_token);
-      setUser(response.user);
+      if (response.access_token) {
+        localStorage.setItem('kramic_token', response.access_token);
+      }
+      setUser(response.user as User);
     } catch (error) {
       if (error instanceof ApiError) {
         throw new Error(error.message);
@@ -109,8 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const googleLogin = async (token: string, data: GoogleLoginData) => {
     try {
       const response = await authApi.googleAuth({ token, ...data });
-      localStorage.setItem('kramic_token', response.access_token);
-      setUser(response.user);
+      if (response.access_token) {
+        localStorage.setItem('kramic_token', response.access_token);
+      }
+      setUser(response.user as User);
     } catch (error) {
       if (error instanceof ApiError) {
         throw new Error(error.message);
@@ -122,7 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setupProfile = async (data: SetupProfileData) => {
     try {
       const response = await authApi.setupProfile(data);
-      setUser(response.user);
+      if (response.user) {
+        setUser(response.user as User);
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         throw new Error(error.message);
@@ -137,10 +145,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(demoUser);
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('kramic_token');
-    localStorage.removeItem('kramic_user');
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (e) {
+      console.error('Logout error', e);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('kramic_token');
+      localStorage.removeItem('kramic_user');
+    }
   };
 
   return (

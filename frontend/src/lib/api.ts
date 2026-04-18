@@ -1,6 +1,4 @@
-// API Client for Kramic.sh Backend
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { supabase } from './supabase';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -9,228 +7,220 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('kramic_token');
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  console.log(`API Call: ${options.method || 'GET'} ${API_BASE_URL}${url}`);
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      ...options,
-      headers,
-    });
-    
-    console.log(`API Response: ${response.status} ${response.statusText}`);
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      console.error('API Error:', error);
-      throw new ApiError(response.status, error.detail || 'Request failed');
-    }
-    
-    return response.json();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    console.error('Network Error:', error);
-    throw new ApiError(0, 'Network error - please check if the backend is running');
-  }
-}
-
 // Auth API
 export const authApi = {
-  async register(data: {
-    email: string;
-    password: string;
-    name: string;
-    role: string;
-  }) {
-    return fetchWithAuth('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
+  async register(data: { email: string; password: string; name: string; role: string }) {
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
     });
+    if (error) throw new ApiError(error.status || 400, error.message);
+    
+    if (authData.user) {
+      const { error: profileError } = await supabase.from('profiles').insert([
+        {
+          id: authData.user.id,
+          full_name: data.name,
+          role: data.role.toUpperCase() as any, // 'STUDENT' or 'SENIOR'
+        }
+      ]);
+      if (profileError) throw new ApiError(400, profileError.message);
+    }
+    
+    // Attempt to get the combined user object
+    try {
+      const user = await this.getMe();
+      return { access_token: authData.session?.access_token, user };
+    } catch (e) {
+      // In case getMe fails immediately after sign up
+      return { access_token: authData.session?.access_token, user: authData.user };
+    }
   },
   
   async login(email: string, password: string) {
-    const formData = new URLSearchParams();
-    formData.append('username', email);
-    formData.append('password', password);
-    
-    return fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData,
-    }).then(async (res) => {
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ detail: 'Login failed' }));
-        throw new ApiError(res.status, error.detail);
-      }
-      return res.json();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
+    if (error) throw new ApiError(error.status || 400, error.message);
+    
+    const user = await this.getMe();
+    return { access_token: data.session?.access_token, user };
   },
   
-  async googleAuth(data: {
-    token: string;
-    role: string;
-  }) {
-    console.log('Google Auth API call:', { role: data.role, tokenLength: data.token.length });
-    return fetchWithAuth('/api/auth/google', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async googleAuth(data: { token: string; role: string }) {
+    const user = await this.getMe();
+    if (user?.id) {
+      await supabase.from('profiles').update({ role: data.role.toUpperCase() }).eq('id', user.id);
+    }
+    return { access_token: 'google-oauth', user };
   },
 
-  async setupProfile(data: {
-    domain: string;
-    skills: string[];
-    bio?: string;
-    github_url?: string;
-    avatar_url?: string;
-    company?: string;
-  }) {
-    return fetchWithAuth('/api/auth/profile-setup', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async setupProfile(data: { domain: string; skills: string[]; bio?: string; github_url?: string; avatar_url?: string; company?: string }) {
+    const user = await this.getMe();
+    if (!user?.id) throw new ApiError(401, 'Unauthorized');
+    
+    const { error } = await supabase.from('profiles').update({
+      domain: data.domain,
+      skills: data.skills,
+    }).eq('id', user.id);
+    if (error) throw new ApiError(400, error.message);
+    
+    const updatedUser = await this.getMe();
+    return { user: updatedUser };
   },
   
   async getMe() {
-    return fetchWithAuth('/api/auth/me');
+    const { data: authData, error } = await supabase.auth.getUser();
+    if (error || !authData.user) throw new ApiError(401, 'Unauthorized');
+    
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', authData.user.id).single();
+    if (profileError) throw new ApiError(404, 'Profile not found');
+    
+    return {
+      ...authData.user,
+      ...profile,
+      name: profile.full_name,
+      karma_score: profile.karma_score || 0,
+    };
   },
+
+  async logout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw new ApiError(400, error.message);
+  }
 };
 
 // Task API
 export const taskApi = {
-  async getTasks(filters?: {
-    status?: string;
-    difficulty?: string;
-    domain?: string;
-  }) {
-    const params = new URLSearchParams();
-    if (filters?.status) params.append('status', filters.status);
-    if (filters?.difficulty) params.append('difficulty', filters.difficulty);
-    if (filters?.domain) params.append('domain', filters.domain);
+  async getTasks(filters?: { status?: string; difficulty?: string; domain?: string }) {
+    let query = supabase.from('solo_tasks').select(`
+      *,
+      profiles:senior_id (full_name, domain)
+    `);
+    if (filters?.status) query = query.eq('status', filters.status.toUpperCase());
     
-    const query = params.toString();
-    return fetchWithAuth(`/api/tasks${query ? `?${query}` : ''}`);
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw new ApiError(400, error.message);
+    return data;
   },
   
   async getTask(id: string) {
-    return fetchWithAuth(`/api/tasks/${id}`);
+    const { data, error } = await supabase.from('solo_tasks').select(`
+      *,
+      profiles:senior_id (full_name)
+    `).eq('id', id).single();
+    if (error) throw new ApiError(404, error.message);
+    return data;
   },
   
-  async createTask(data: {
-    title: string;
-    description: string;
-    stack: string[];
-    difficulty: string;
-    time_estimate_min: number;
-    min_karma?: number;
-    reward_amount?: number;
-    reward_karma?: number;
-    figma_url?: string;
-    design_files?: string[];
-  }) {
-    return fetchWithAuth('/api/tasks', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async createTask(data: { title: string; description: string; karma_reward?: number; }) {
+    const user = await authApi.getMe();
+    if (!user.id) throw new ApiError(401, 'Unauthorized');
+
+    const { data: taskData, error } = await supabase.from('solo_tasks').insert([
+      {
+        senior_id: user.id,
+        title: data.title,
+        description: data.description,
+        karma_reward: data.karma_reward || 10,
+        status: 'OPEN'
+      }
+    ]).select().single();
+    if (error) throw new ApiError(400, error.message);
+    return taskData;
   },
   
   async claimTask(id: string) {
-    return fetchWithAuth(`/api/tasks/${id}/claim`, {
-      method: 'POST',
-    });
-  },
-  
-  async applyForTask(id: string, applicationText: string) {
-    return fetchWithAuth(`/api/tasks/${id}/apply`, {
-      method: 'POST',
-      body: JSON.stringify({ application_text: applicationText }),
-    });
+    const user = await authApi.getMe();
+    if (!user.id) throw new ApiError(401, 'Unauthorized');
+
+    const { data, error } = await supabase.from('solo_tasks').update({
+      assignee_id: user.id,
+      status: 'CLAIMED'
+    }).eq('id', id).select().single();
+    if (error) throw new ApiError(400, error.message);
+    return data;
   },
   
   async submitTask(id: string, data: { github_link: string; submission_text: string }) {
-    return fetchWithAuth(`/api/tasks/${id}/submit`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    const user = await authApi.getMe();
+    if (!user.id) throw new ApiError(401, 'Unauthorized');
+
+    const { data: updatedTask, error } = await supabase.from('solo_tasks').update({
+      submission_link: data.github_link,
+      status: 'IN_REVIEW'
+    }).eq('id', id).eq('assignee_id', user.id).select().single();
+    if (error) throw new ApiError(400, error.message);
+    return updatedTask;
   },
   
   async reviewTask(id: string, data: { action: string; feedback?: string }) {
-    return fetchWithAuth(`/api/tasks/${id}/review`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-  
-  async getApplications(taskId: string) {
-    return fetchWithAuth(`/api/tasks/${taskId}/applications`);
-  },
-  
-  async selectApplicant(taskId: string, applicationId: string) {
-    return fetchWithAuth(`/api/tasks/${taskId}/select-applicant`, {
-      method: 'POST',
-      body: JSON.stringify({ application_id: applicationId }),
-    });
+    if (data.action === 'approve' || data.action === 'pass') {
+      const { error } = await supabase.rpc('approve_solo_task', { p_task_id: id });
+      if (error) throw new ApiError(400, error.message);
+      return { success: true };
+    }
+    return { success: false };
   },
 };
 
 // User API
 export const userApi = {
   async getUser(userId: string) {
-    return fetchWithAuth(`/api/users/${userId}`);
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (error) throw new ApiError(404, error.message);
+    return data;
   },
   
   async getKarmaEvents(userId: string) {
-    return fetchWithAuth(`/api/users/${userId}/karma`);
+    const { data, error } = await supabase.from('attestations').select(`
+      *,
+      solo_tasks:task_id (title)
+    `).eq('student_id', userId).order('created_at', { ascending: false });
+    if (error) throw new ApiError(400, error.message);
+    return data;
   },
   
   async getLeaderboard(limit: number = 50) {
-    return fetchWithAuth(`/api/users?limit=${limit}`);
+    const { data, error } = await supabase.from('profiles').select('*').order('karma_score', { ascending: false }).limit(limit);
+    if (error) throw new ApiError(400, error.message);
+    return data;
   },
 };
 
 // Sprint API
 export const sprintApi = {
-  async createSprint(data: { title: string; description: string; max_participants?: number }) {
-    return fetchWithAuth('/api/sprints', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async createSprint(data: { title: string; description: string; max_participants?: number; repo_link?: string }) {
+    const { data: sprint, error } = await supabase.from('squad_sprints').insert([
+      {
+        title: data.title,
+        description: data.description,
+        repo_link: data.repo_link || '',
+        max_members: data.max_participants || 4,
+      }
+    ]).select().single();
+    if (error) throw new ApiError(400, error.message);
+    return sprint;
   },
   
   async joinSprint(sprintId: string) {
-    return fetchWithAuth('/api/sprints/join', {
-      method: 'POST',
-      body: JSON.stringify({ sprint_id: sprintId }),
-    });
-  },
-  
-  async getSprintAuth(sprintId: string) {
-    return fetchWithAuth(`/api/sprints/${sprintId}/auth`);
-  },
-  
-  async completeSprint(sprintId: string, peerUpvotes: string[]) {
-    return fetchWithAuth('/api/sprints/complete', {
-      method: 'POST',
-      body: JSON.stringify({ sprint_id: sprintId, peer_upvotes: peerUpvotes }),
-    });
+    const user = await authApi.getMe();
+    if (!user.id) throw new ApiError(401, 'Unauthorized');
+
+    const { error } = await supabase.from('squad_members').insert([
+      { sprint_id: sprintId, student_id: user.id }
+    ]);
+    if (error) throw new ApiError(400, error.message);
+    return { success: true };
   },
   
   async getActiveSprints() {
-    return fetchWithAuth('/api/sprints');
+    const { data, error } = await supabase.from('squad_sprints').select(`
+      *,
+      squad_members ( count )
+    `).eq('status', 'FORMING').order('created_at', { ascending: false });
+    if (error) throw new ApiError(400, error.message);
+    return data;
   },
 };
